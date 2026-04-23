@@ -102,8 +102,6 @@
     let filteredY = 0;
     let motionEnergy = 0;
 
-    let sceneBlend = 0;
-    let lastScene = "A";
     let sceneA = 1, sceneB = 0, sceneC = 0, sceneD = 0;
 
     function clamp(v, lo, hi) {
@@ -122,14 +120,6 @@
       return a * (1 - t) + b * t;
     }
 
-    function mixColor(c1, c2, t) {
-      return [
-        Math.round(mix(c1[0], c2[0], t)),
-        Math.round(mix(c1[1], c2[1], t)),
-        Math.round(mix(c1[2], c2[2], t))
-      ];
-    }
-
     function getRoleColor(role) {
       if (role === "Piano1") return [255, 120, 200];
       if (role === "Piano2") return [120, 255, 120];
@@ -143,26 +133,23 @@
         return {
           name: "Residual",
           baseSize: 0.02,
-          scaleGain: 0.26,
-          maxScale: 1.8,
-          brightnessBase: 0.10,
+          scaleGain: 0.24,
+          maxScale: 1.75,
+          brightnessBase: 0.16,
           brightnessGain: 0.10,
-          inactiveBrightness: 0.03,
+          globalAmbient: 0.12,
           attackImpulse: 0.18,
           releaseImpulse: 0.07,
           attackTilt: 0.14,
           releaseTilt: 0.08,
           energyAttack: 0.18,
           energyRelease: 0.06,
-          glowSpread: 0.95,
-          formAlpha: 0.60,
+          glowSpread: 1.18,
+          formAlpha: 0.58,
           formGlow: 26,
           glowColor: [255, 255, 255],
-          baseBgMix: 0.14,
-          bgContrast: 0.75,
-          invertMode: false,
-          centerBoost: 0.0,
-          formDarken: 0.0
+          centerBoost: 0.00,
+          invertMode: false
         };
       }
 
@@ -170,26 +157,23 @@
         return {
           name: "Articulation",
           baseSize: 0.03,
-          scaleGain: 0.40,
-          maxScale: 2.5,
-          brightnessBase: 0.16,
-          brightnessGain: 0.22,
-          inactiveBrightness: 0.05,
+          scaleGain: 0.38,
+          maxScale: 2.4,
+          brightnessBase: 0.22,
+          brightnessGain: 0.18,
+          globalAmbient: 0.16,
           attackImpulse: 0.88,
           releaseImpulse: 0.18,
           attackTilt: 0.65,
           releaseTilt: 0.18,
           energyAttack: 0.80,
           energyRelease: 0.14,
-          glowSpread: 0.92,
+          glowSpread: 1.20,
           formAlpha: 1.0,
           formGlow: 10,
           glowColor: [255, 255, 255],
-          baseBgMix: 0.18,
-          bgContrast: 1.25,
-          invertMode: false,
-          centerBoost: 0.55,
-          formDarken: 0.0
+          centerBoost: 0.60,
+          invertMode: false
         };
       }
 
@@ -197,52 +181,46 @@
         return {
           name: "Saturation",
           baseSize: 0.05,
-          scaleGain: 0.62,
-          maxScale: 3.5,
-          brightnessBase: 0.26,
-          brightnessGain: 0.36,
-          inactiveBrightness: 0.10,
+          scaleGain: 0.58,
+          maxScale: 3.35,
+          brightnessBase: 0.32,
+          brightnessGain: 0.34,
+          globalAmbient: 0.22,
           attackImpulse: 0.86,
           releaseImpulse: 0.06,
           attackTilt: 0.62,
           releaseTilt: 0.08,
           energyAttack: 0.82,
           energyRelease: 0.06,
-          glowSpread: 1.02,
+          glowSpread: 1.25,
           formAlpha: 0.96,
           formGlow: 34,
           glowColor: [255, 225, 150],
-          baseBgMix: 0.30,
-          bgContrast: 1.55,
-          invertMode: false,
           centerBoost: 0.12,
-          formDarken: 0.0
+          invertMode: false
         };
       }
 
       return {
         name: "Inverse",
         baseSize: 0.03,
-        scaleGain: 0.48,
+        scaleGain: 0.46,
         maxScale: 3.0,
         brightnessBase: 0.08,
-        brightnessGain: 0.78,
-        inactiveBrightness: 0.04,
+        brightnessGain: 0.70,
+        globalAmbient: 0.10,
         attackImpulse: 0.86,
         releaseImpulse: 0.06,
         attackTilt: 0.66,
         releaseTilt: 0.08,
         energyAttack: 0.82,
         energyRelease: 0.06,
-        glowSpread: 1.05,
+        glowSpread: 1.28,
         formAlpha: 0.72,
         formGlow: 42,
         glowColor: [255, 255, 255],
-        baseBgMix: 0.10,
-        bgContrast: 1.15,
-        invertMode: true,
         centerBoost: 0.10,
-        formDarken: 0.45
+        invertMode: true
       };
     }
 
@@ -339,16 +317,16 @@
     function drawGlow(cx, cy, rgb, alpha, w, h, spread) {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * spread);
       grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
-      grad.addColorStop(0.40, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.45})`);
+      grad.addColorStop(0.38, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.45})`);
       grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
     }
 
     function drawCenterLight(alpha, w, h) {
-      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.42);
+      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.45);
       grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
-      grad.addColorStop(0.45, `rgba(255,255,255,${alpha * 0.25})`);
+      grad.addColorStop(0.45, `rgba(255,255,255,${alpha * 0.24})`);
       grad.addColorStop(1, `rgba(255,255,255,0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
@@ -419,10 +397,6 @@
       ctx.restore();
     }
 
-    function sceneMixedValue(a, b, c, d) {
-      return a * sceneA + b * sceneB + c * sceneC + d * sceneD;
-    }
-
     function render() {
       updateSceneBlend();
 
@@ -435,56 +409,42 @@
       const cy = h / 2;
 
       const role = roleSelect.value;
-
-      const sceneAParams = getSceneParams("A");
-      const sceneBParams = getSceneParams("B");
-      const sceneCParams = getSceneParams("C");
-      const sceneDParams = getSceneParams("D");
-
       const energyNorm = clamp(motionEnergy / 10, 0, 1.0);
 
-      const brightnessBase = sceneMixedValue(
-        sceneAParams.brightnessBase,
-        sceneBParams.brightnessBase,
-        sceneCParams.brightnessBase,
-        sceneDParams.brightnessBase
-      );
-      const brightnessGain = sceneMixedValue(
-        sceneAParams.brightnessGain,
-        sceneBParams.brightnessGain,
-        sceneCParams.brightnessGain,
-        sceneDParams.brightnessGain
-      );
-      const inactiveBrightness = sceneMixedValue(
-        sceneAParams.inactiveBrightness,
-        sceneBParams.inactiveBrightness,
-        sceneCParams.inactiveBrightness,
-        sceneDParams.inactiveBrightness
-      );
-      const baseBgMix = sceneMixedValue(
-        sceneAParams.baseBgMix,
-        sceneBParams.baseBgMix,
-        sceneCParams.baseBgMix,
-        sceneDParams.baseBgMix
-      );
-      const bgContrast = sceneMixedValue(
-        sceneAParams.bgContrast,
-        sceneBParams.bgContrast,
-        sceneCParams.bgContrast,
-        sceneDParams.bgContrast
-      );
-      const glowSpread = sceneMixedValue(
-        sceneAParams.glowSpread,
-        sceneBParams.glowSpread,
-        sceneCParams.glowSpread,
-        sceneDParams.glowSpread
-      );
-      const centerBoost = sceneMixedValue(
-        sceneAParams.centerBoost,
-        sceneBParams.centerBoost,
-        sceneCParams.centerBoost,
-        sceneDParams.centerBoost
-      );
+      const sA = getSceneParams("A");
+      const sB = getSceneParams("B");
+      const sC = getSceneParams("C");
+      const sD = getSceneParams("D");
+
+      const brightnessBase =
+        sA.brightnessBase * sceneA +
+        sB.brightnessBase * sceneB +
+        sC.brightnessBase * sceneC +
+        sD.brightnessBase * sceneD;
+
+      const brightnessGain =
+        sA.brightnessGain * sceneA +
+        sB.brightnessGain * sceneB +
+        sC.brightnessGain * sceneC +
+        sD.brightnessGain * sceneD;
+
+      const globalAmbient =
+        sA.globalAmbient * sceneA +
+        sB.globalAmbient * sceneB +
+        sC.globalAmbient * sceneC +
+        sD.globalAmbient * sceneD;
+
+      const glowSpread =
+        sA.glowSpread * sceneA +
+        sB.glowSpread * sceneB +
+        sC.glowSpread * sceneC +
+        sD.glowSpread * sceneD;
+
+      const centerBoost =
+        sA.centerBoost * sceneA +
+        sB.centerBoost * sceneB +
+        sC.centerBoost * sceneC +
+        sD.centerBoost * sceneD;
 
       const activeBrightness = clamp(
         brightnessBase + energyNorm * brightnessGain,
@@ -492,15 +452,17 @@
         1.0
       );
 
-      let tl = inactiveBrightness;
-      let tr = inactiveBrightness;
-      let bl = inactiveBrightness;
-      let br = inactiveBrightness;
+      // all colors always slightly present
+      let tl = globalAmbient;
+      let tr = globalAmbient;
+      let bl = globalAmbient;
+      let br = globalAmbient;
 
       if (role === "Piano1") tl = activeBrightness;
       if (role === "Piano2") tr = activeBrightness;
       if (role === "Perc1") bl = activeBrightness;
       if (role === "Perc2") br = activeBrightness;
+
       if (role === "AllForms") {
         tl = activeBrightness;
         tr = activeBrightness;
@@ -508,61 +470,39 @@
         br = activeBrightness;
       }
 
-      const invertMix = sceneD;
-
+      // unified dark base, no hard quadrants
+      const bgWhite = clamp(0.02 + sceneD * (0.08 + energyNorm * 0.72), 0.02, 0.90);
       ctx.clearRect(0, 0, w, h);
-
-      // mixed background base
-      const bgWhite = clamp(0.02 + invertMix * (0.10 + energyNorm * 0.75), 0.02, 0.95);
       ctx.fillStyle = `rgba(${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},1)`;
       ctx.fillRect(0, 0, w, h);
 
-      // softened quadrant bases
-      ctx.fillStyle = `rgba(255,120,200,${baseBgMix * tl * bgContrast})`;
-      ctx.fillRect(0, 0, w / 2, h / 2);
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h, glowSpread);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h, glowSpread);
 
-      ctx.fillStyle = `rgba(120,255,120,${baseBgMix * tr * bgContrast})`;
-      ctx.fillRect(w / 2, 0, w / 2, h / 2);
-
-      ctx.fillStyle = `rgba(255,100,100,${baseBgMix * bl * bgContrast})`;
-      ctx.fillRect(0, h / 2, w / 2, h / 2);
-
-      ctx.fillStyle = `rgba(100,120,255,${baseBgMix * br * bgContrast})`;
-      ctx.fillRect(w / 2, h / 2, w / 2, h / 2);
-
-      // always soft transitions
-      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl * bgContrast, w, h, glowSpread);
-      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr * bgContrast, w, h, glowSpread);
-      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl * bgContrast, w, h, glowSpread);
-      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br * bgContrast, w, h, glowSpread);
-
-      // articulation center flash
       if (centerBoost > 0.01) {
         drawCenterLight(centerBoost * energyNorm, w, h);
       }
 
-      function getShapeParamsForScene(sceneKey) {
-        return getSceneParams(sceneKey);
-      }
-
-      function getShapeScale(sceneKey) {
-        const p = getShapeParamsForScene(sceneKey);
+      function shapeState(sceneKey) {
+        const p = getSceneParams(sceneKey);
         return {
           sx: clamp(p.baseSize + filteredX * p.scaleGain, p.baseSize, p.maxScale),
           sy: clamp(p.baseSize + filteredY * p.scaleGain, p.baseSize, p.maxScale),
-          alpha: p.formAlpha * (1 - (sceneKey === "D" ? energyNorm * 0.08 : 0)),
+          alpha: p.formAlpha * (1 - (sceneKey === "D" ? energyNorm * 0.10 : 0)),
           glowBlur: p.formGlow,
           glowColor: p.glowColor,
-          darken: p.formDarken,
           invertMode: p.invertMode
         };
       }
 
-      function fillWhite(alpha) {
+      function whiteFill(alpha) {
         return `rgba(255,255,255,${alpha})`;
       }
 
-      function fillRole(rgb, alpha, darken) {
+      function darkRoleFill(rgb, alpha) {
+        const darken = 0.45;
         const r = Math.round(rgb[0] * (1 - darken));
         const g = Math.round(rgb[1] * (1 - darken));
         const b = Math.round(rgb[2] * (1 - darken));
@@ -574,25 +514,24 @@
       const pc1Color = getRoleColor("Perc1");
       const pc2Color = getRoleColor("Perc2");
 
-      function drawRoleShape(roleName, sceneKey, drawFn, rgb) {
-        const sp = getShapeScale(sceneKey);
-        const fillFn = sp.invertMode
-          ? (a) => fillRole(rgb, a, sp.darken)
-          : (a) => fillWhite(a);
-
-        drawFn(cx, cy, sp.sx, sp.sy, fillFn, sp.alpha, sp.glowColor, sp.glowBlur);
+      function drawRole(drawFn, rgb, state) {
+        const fillFn = state.invertMode ? (a) => darkRoleFill(rgb, a) : (a) => whiteFill(a);
+        drawFn(cx, cy, state.sx, state.sy, fillFn, state.alpha, state.glowColor, state.glowBlur);
       }
 
-      if (role === "Piano1") drawRoleShape("Piano1", sceneSelect.value, drawCircle, p1Color);
-      if (role === "Piano2") drawRoleShape("Piano2", sceneSelect.value, drawPentagon, p2Color);
-      if (role === "Perc1")  drawRoleShape("Perc1", sceneSelect.value, drawTriangle, pc1Color);
-      if (role === "Perc2")  drawRoleShape("Perc2", sceneSelect.value, drawSquare, pc2Color);
+      if (role !== "AllForms") {
+        const state = shapeState(sceneSelect.value);
 
-      if (role === "AllForms") {
-        drawRoleShape("Piano1", "A", drawCircle, p1Color);
-        drawRoleShape("Piano2", "B", drawPentagon, p2Color);
-        drawRoleShape("Perc1", "C", drawTriangle, pc1Color);
-        drawRoleShape("Perc2", "D", drawSquare, pc2Color);
+        if (role === "Piano1") drawRole(drawCircle, p1Color, state);
+        if (role === "Piano2") drawRole(drawPentagon, p2Color, state);
+        if (role === "Perc1") drawRole(drawTriangle, pc1Color, state);
+        if (role === "Perc2") drawRole(drawSquare, pc2Color, state);
+      } else {
+        // mixed behavior per form
+        drawRole(drawCircle, p1Color, shapeState("A"));
+        drawRole(drawPentagon, p2Color, shapeState("B"));
+        drawRole(drawTriangle, pc1Color, shapeState("C"));
+        drawRole(drawSquare, pc2Color, shapeState("D"));
       }
 
       requestAnimationFrame(render);
