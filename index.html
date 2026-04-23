@@ -397,6 +397,21 @@
       ctx.restore();
     }
 
+    function drawRippleRings(cx, cy, baseRadius, count, spacing, alpha, lineWidth, stretchX, stretchY) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = lineWidth;
+    
+      for (let i = 0; i < count; i++) {
+        const r = baseRadius + i * spacing;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r * stretchX, r * stretchY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    
+      ctx.restore();
+    }
+
     function render() {
       updateSceneBlend();
 
@@ -534,6 +549,23 @@
         drawFn(cx, cy, state.sx, state.sy, fillFn, state.alpha, state.glowColor, state.glowBlur);
       }
 
+      if (sceneSelect.value === "B") {
+        const rippleStretchX = 1.15 + filteredX * 0.05;
+        const rippleStretchY = 1.00 + filteredY * 0.03;
+      
+        drawRippleRings(
+          cx,
+          cy,
+          Math.min(w, h) * 0.10,   // Startgröße
+          4,                       // Anzahl der Ringe
+          Math.min(w, h) * 0.12,   // Abstand
+          0.10,                    // Transparenz
+          2,                       // Linienbreite
+          rippleStretchX,
+          rippleStretchY
+        );
+      }
+      
       if (role !== "AllForms") {
         const state = motionState(sceneSelect.value, sceneSelect.value);
       
