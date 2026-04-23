@@ -103,6 +103,7 @@
     let motionEnergy = 0;
 
     let sceneA = 1, sceneB = 0, sceneC = 0, sceneD = 0;
+    let pulseT = 0;
 
     function clamp(v, lo, hi) {
       return Math.max(lo, Math.min(hi, v));
@@ -114,10 +115,6 @@
       } else {
         return current * (1 - release) + target * release;
       }
-    }
-
-    function mix(a, b, t) {
-      return a * (1 - t) + b * t;
     }
 
     function getRoleColor(role) {
@@ -135,21 +132,23 @@
           baseSize: 0.02,
           scaleGain: 0.24,
           maxScale: 1.75,
-          brightnessBase: 0.16,
-          brightnessGain: 0.10,
-          globalAmbient: 0.12,
+          brightnessBase: 0.18,
+          brightnessGain: 0.12,
+          globalAmbient: 0.16,
           attackImpulse: 0.18,
           releaseImpulse: 0.07,
           attackTilt: 0.14,
           releaseTilt: 0.08,
           energyAttack: 0.18,
           energyRelease: 0.06,
-          glowSpread: 1.18,
+          glowSpread: 1.32,
           formAlpha: 0.58,
-          formGlow: 26,
+          formGlow: 28,
           glowColor: [255, 255, 255],
           centerBoost: 0.00,
-          invertMode: false
+          invertMode: false,
+          bgPulse: 0.02,
+          bgMotionBoost: 0.22
         };
       }
 
@@ -159,21 +158,23 @@
           baseSize: 0.03,
           scaleGain: 0.38,
           maxScale: 2.4,
-          brightnessBase: 0.22,
-          brightnessGain: 0.18,
-          globalAmbient: 0.16,
+          brightnessBase: 0.26,
+          brightnessGain: 0.24,
+          globalAmbient: 0.20,
           attackImpulse: 0.88,
           releaseImpulse: 0.18,
           attackTilt: 0.65,
           releaseTilt: 0.18,
           energyAttack: 0.80,
           energyRelease: 0.14,
-          glowSpread: 1.20,
+          glowSpread: 1.38,
           formAlpha: 1.0,
           formGlow: 10,
           glowColor: [255, 255, 255],
-          centerBoost: 0.60,
-          invertMode: false
+          centerBoost: 0.72,
+          invertMode: false,
+          bgPulse: 0.05,
+          bgMotionBoost: 0.55
         };
       }
 
@@ -183,21 +184,23 @@
           baseSize: 0.05,
           scaleGain: 0.58,
           maxScale: 3.35,
-          brightnessBase: 0.32,
-          brightnessGain: 0.34,
-          globalAmbient: 0.22,
+          brightnessBase: 0.40,
+          brightnessGain: 0.42,
+          globalAmbient: 0.28,
           attackImpulse: 0.86,
           releaseImpulse: 0.06,
           attackTilt: 0.62,
           releaseTilt: 0.08,
           energyAttack: 0.82,
           energyRelease: 0.06,
-          glowSpread: 1.25,
+          glowSpread: 1.42,
           formAlpha: 0.96,
           formGlow: 34,
           glowColor: [255, 225, 150],
-          centerBoost: 0.12,
-          invertMode: false
+          centerBoost: 0.14,
+          invertMode: false,
+          bgPulse: 0.03,
+          bgMotionBoost: 0.70
         };
       }
 
@@ -206,21 +209,23 @@
         baseSize: 0.03,
         scaleGain: 0.46,
         maxScale: 3.0,
-        brightnessBase: 0.08,
-        brightnessGain: 0.70,
-        globalAmbient: 0.10,
+        brightnessBase: 0.10,
+        brightnessGain: 0.72,
+        globalAmbient: 0.14,
         attackImpulse: 0.86,
         releaseImpulse: 0.06,
         attackTilt: 0.66,
         releaseTilt: 0.08,
         energyAttack: 0.82,
         energyRelease: 0.06,
-        glowSpread: 1.28,
+        glowSpread: 1.40,
         formAlpha: 0.72,
         formGlow: 42,
         glowColor: [255, 255, 255],
         centerBoost: 0.10,
-        invertMode: true
+        invertMode: true,
+        bgPulse: 0.02,
+        bgMotionBoost: 0.45
       };
     }
 
@@ -317,19 +322,43 @@
     function drawGlow(cx, cy, rgb, alpha, w, h, spread) {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * spread);
       grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
-      grad.addColorStop(0.38, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.45})`);
+      grad.addColorStop(0.28, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.58})`);
+      grad.addColorStop(0.62, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.20})`);
       grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
     }
 
     function drawCenterLight(alpha, w, h) {
-      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.45);
+      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.52);
       grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
-      grad.addColorStop(0.45, `rgba(255,255,255,${alpha * 0.24})`);
+      grad.addColorStop(0.42, `rgba(255,255,255,${alpha * 0.28})`);
       grad.addColorStop(1, `rgba(255,255,255,0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawSoftRippleField(cx, cy, baseRadius, count, spacing, alpha, stretchX, stretchY) {
+      ctx.save();
+      for (let i = 0; i < count; i++) {
+        const r = baseRadius + i * spacing;
+        const ringAlpha = alpha * (1 - i / count) * 0.8;
+        const grad = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r * 1.22);
+        grad.addColorStop(0, `rgba(255,255,255,0)`);
+        grad.addColorStop(0.40, `rgba(255,255,255,${ringAlpha * 0.35})`);
+        grad.addColorStop(0.52, `rgba(255,255,255,${ringAlpha})`);
+        grad.addColorStop(0.70, `rgba(255,255,255,${ringAlpha * 0.20})`);
+        grad.addColorStop(1, `rgba(255,255,255,0)`);
+        ctx.fillStyle = grad;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(stretchX, stretchY);
+        ctx.translate(-cx, -cy);
+        ctx.fillRect(cx - r * 1.4, cy - r * 1.4, r * 2.8, r * 2.8);
+        ctx.restore();
+      }
+      ctx.restore();
     }
 
     function drawShapeGlow(glowColor, glowBlur) {
@@ -397,23 +426,9 @@
       ctx.restore();
     }
 
-    function drawRippleRings(cx, cy, baseRadius, count, spacing, alpha, lineWidth, stretchX, stretchY) {
-      ctx.save();
-      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-      ctx.lineWidth = lineWidth;
-    
-      for (let i = 0; i < count; i++) {
-        const r = baseRadius + i * spacing;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r * stretchX, r * stretchY, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    
-      ctx.restore();
-    }
-
     function render() {
       updateSceneBlend();
+      pulseT += 0.008;
 
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight * 0.8;
@@ -461,13 +476,24 @@
         sC.centerBoost * sceneC +
         sD.centerBoost * sceneD;
 
+      const bgMotionBoost =
+        sA.bgMotionBoost * sceneA +
+        sB.bgMotionBoost * sceneB +
+        sC.bgMotionBoost * sceneC +
+        sD.bgMotionBoost * sceneD;
+
+      const bgPulse =
+        sA.bgPulse * sceneA +
+        sB.bgPulse * sceneB +
+        sC.bgPulse * sceneC +
+        sD.bgPulse * sceneD;
+
       const activeBrightness = clamp(
         brightnessBase + energyNorm * brightnessGain,
         brightnessBase,
         1.0
       );
 
-      // all colors always slightly present
       let tl = globalAmbient;
       let tr = globalAmbient;
       let bl = globalAmbient;
@@ -485,31 +511,50 @@
         br = activeBrightness;
       }
 
-      // unified dark base, no hard quadrants
       const bgWhite = clamp(0.02 + sceneD * (0.08 + energyNorm * 0.72), 0.02, 0.90);
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = `rgba(${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},1)`;
       ctx.fillRect(0, 0, w, h);
 
-      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h, glowSpread);
-      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h, glowSpread);
-      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h, glowSpread);
-      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h, glowSpread);
+      const pulse = 1 + Math.sin(pulseT) * bgPulse;
+      const bgEnergyScale = 1 + energyNorm * bgMotionBoost;
+
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h, glowSpread * pulse * bgEnergyScale);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h, glowSpread * pulse * bgEnergyScale);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h, glowSpread * pulse * bgEnergyScale);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h, glowSpread * pulse * bgEnergyScale);
 
       if (centerBoost > 0.01) {
         drawCenterLight(centerBoost * energyNorm, w, h);
       }
 
+      // articulation ripple atmosphere: huge, soft, always beyond frame
+      if (sceneSelect.value === "B") {
+        const rippleStretchX = 1.12 + filteredX * 0.08;
+        const rippleStretchY = 1.00 + filteredY * 0.05;
+
+        drawSoftRippleField(
+          cx,
+          cy,
+          Math.min(w, h) * 0.32,
+          5,
+          Math.min(w, h) * 0.22,
+          0.10 + energyNorm * 0.10,
+          rippleStretchX,
+          rippleStretchY
+        );
+      }
+
       function motionState(motionSceneKey, visualSceneKey) {
         const motionParams = getSceneParams(motionSceneKey);
         const visualParams = getSceneParams(visualSceneKey);
-      
+
         const dynamicGlow =
           visualParams.formGlow +
           filteredX * 8 +
           filteredY * 8 +
           energyNorm * (visualSceneKey === "B" ? 24 : 12);
-      
+
         return {
           sx: clamp(
             motionParams.baseSize + filteredX * motionParams.scaleGain,
@@ -527,6 +572,7 @@
           invertMode: visualParams.invertMode
         };
       }
+
       function whiteFill(alpha) {
         return `rgba(255,255,255,${alpha})`;
       }
@@ -549,35 +595,16 @@
         drawFn(cx, cy, state.sx, state.sy, fillFn, state.alpha, state.glowColor, state.glowBlur);
       }
 
-      if (sceneSelect.value === "B") {
-        const rippleStretchX = 1.15 + filteredX * 0.05;
-        const rippleStretchY = 1.00 + filteredY * 0.03;
-      
-        drawRippleRings(
-          cx,
-          cy,
-          Math.min(w, h) * 0.10,   // Startgröße
-          4,                       // Anzahl der Ringe
-          Math.min(w, h) * 0.12,   // Abstand
-          0.10,                    // Transparenz
-          2,                       // Linienbreite
-          rippleStretchX,
-          rippleStretchY
-        );
-      }
-      
       if (role !== "AllForms") {
         const state = motionState(sceneSelect.value, sceneSelect.value);
-      
+
         if (role === "Piano1") drawRole(drawCircle, p1Color, state);
         if (role === "Piano2") drawRole(drawPentagon, p2Color, state);
         if (role === "Perc1") drawRole(drawTriangle, pc1Color, state);
         if (role === "Perc2") drawRole(drawSquare, pc2Color, state);
       } else {
-        // motion behavior differs per form
-        // visual coloring follows ONLY the globally selected scene
         const visualScene = sceneSelect.value;
-      
+
         drawRole(drawCircle,   p1Color,  motionState("A", visualScene));
         drawRole(drawPentagon, p2Color,  motionState("B", visualScene));
         drawRole(drawTriangle, pc1Color, motionState("C", visualScene));
