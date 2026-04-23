@@ -489,6 +489,12 @@
         const motionParams = getSceneParams(motionSceneKey);
         const visualParams = getSceneParams(visualSceneKey);
       
+        const dynamicGlow =
+          visualParams.formGlow +
+          filteredX * 8 +
+          filteredY * 8 +
+          energyNorm * (visualSceneKey === "B" ? 18 : 12);
+      
         return {
           sx: clamp(
             motionParams.baseSize + filteredX * motionParams.scaleGain,
@@ -501,12 +507,11 @@
             motionParams.maxScale
           ),
           alpha: visualParams.formAlpha * (1 - (visualSceneKey === "D" ? energyNorm * 0.10 : 0)),
-          glowBlur: visualParams.formGlow + filteredX * 10 + filteredY * 10 + energyNorm * 12,
+          glowBlur: dynamicGlow,
           glowColor: visualParams.glowColor,
           invertMode: visualParams.invertMode
         };
       }
-
       function whiteFill(alpha) {
         return `rgba(255,255,255,${alpha})`;
       }
