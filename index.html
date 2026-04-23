@@ -76,7 +76,7 @@
       <option value="A">Scene A: Residual</option>
       <option value="B">Scene B: Articulation</option>
       <option value="C">Scene C: Saturation</option>
-      <option value="D">Scene D: Inversion</option>
+      <option value="D">Scene D: Inverse</option>
     </select>
 
     <button id="startBtn">Enable Motion</button>
@@ -102,6 +102,10 @@
     let filteredY = 0;
     let motionEnergy = 0;
 
+    let sceneBlend = 0;
+    let lastScene = "A";
+    let sceneA = 1, sceneB = 0, sceneC = 0, sceneD = 0;
+
     function clamp(v, lo, hi) {
       return Math.max(lo, Math.min(hi, v));
     }
@@ -114,11 +118,23 @@
       }
     }
 
+    function mix(a, b, t) {
+      return a * (1 - t) + b * t;
+    }
+
+    function mixColor(c1, c2, t) {
+      return [
+        Math.round(mix(c1[0], c2[0], t)),
+        Math.round(mix(c1[1], c2[1], t)),
+        Math.round(mix(c1[2], c2[2], t))
+      ];
+    }
+
     function getRoleColor(role) {
-      if (role === "Piano1") return [255, 120, 200]; // pink
-      if (role === "Piano2") return [120, 255, 120]; // green
-      if (role === "Perc1")  return [255, 100, 100]; // red
-      if (role === "Perc2")  return [100, 120, 255]; // blue
+      if (role === "Piano1") return [255, 120, 200];
+      if (role === "Piano2") return [120, 255, 120];
+      if (role === "Perc1")  return [255, 100, 100];
+      if (role === "Perc2")  return [100, 120, 255];
       return [255, 255, 255];
     }
 
@@ -126,25 +142,27 @@
       if (scene === "A") {
         return {
           name: "Residual",
-          baseSize: 0.018,
-          scaleGain: 0.25,
-          maxScale: 1.7,
-          brightnessBase: 0.08,
+          baseSize: 0.02,
+          scaleGain: 0.26,
+          maxScale: 1.8,
+          brightnessBase: 0.10,
           brightnessGain: 0.10,
-          inactiveBrightness: 0.025,
-          attackImpulse: 0.72,
-          releaseImpulse: 0.030,
-          attackTilt: 0.22,
-          releaseTilt: 0.16,
-          energyAttack: 0.35,
-          energyRelease: 0.030,
-          glowSpread: 0.82,
-          formAlpha: 0.68,
-          formGlow: 18,
+          inactiveBrightness: 0.03,
+          attackImpulse: 0.18,
+          releaseImpulse: 0.07,
+          attackTilt: 0.14,
+          releaseTilt: 0.08,
+          energyAttack: 0.18,
+          energyRelease: 0.06,
+          glowSpread: 0.95,
+          formAlpha: 0.60,
+          formGlow: 26,
           glowColor: [255, 255, 255],
-          baseBgMix: 0.10,
-          bgContrast: 0.70,
-          invertMode: false
+          baseBgMix: 0.14,
+          bgContrast: 0.75,
+          invertMode: false,
+          centerBoost: 0.0,
+          formDarken: 0.0
         };
       }
 
@@ -152,24 +170,26 @@
         return {
           name: "Articulation",
           baseSize: 0.03,
-          scaleGain: 0.42,
-          maxScale: 2.8,
+          scaleGain: 0.40,
+          maxScale: 2.5,
           brightnessBase: 0.16,
-          brightnessGain: 0.20,
+          brightnessGain: 0.22,
           inactiveBrightness: 0.05,
-          attackImpulse: 0.82,
-          releaseImpulse: 0.045,
-          attackTilt: 0.30,
+          attackImpulse: 0.88,
+          releaseImpulse: 0.18,
+          attackTilt: 0.65,
           releaseTilt: 0.18,
-          energyAttack: 0.45,
-          energyRelease: 0.035,
-          glowSpread: 0.70,
+          energyAttack: 0.80,
+          energyRelease: 0.14,
+          glowSpread: 0.92,
           formAlpha: 1.0,
-          formGlow: 8,
+          formGlow: 10,
           glowColor: [255, 255, 255],
           baseBgMix: 0.18,
           bgContrast: 1.25,
-          invertMode: false
+          invertMode: false,
+          centerBoost: 0.55,
+          formDarken: 0.0
         };
       }
 
@@ -177,48 +197,52 @@
         return {
           name: "Saturation",
           baseSize: 0.05,
-          scaleGain: 0.65,
-          maxScale: 3.6,
+          scaleGain: 0.62,
+          maxScale: 3.5,
           brightnessBase: 0.26,
           brightnessGain: 0.36,
           inactiveBrightness: 0.10,
           attackImpulse: 0.86,
-          releaseImpulse: 0.060,
-          attackTilt: 0.36,
-          releaseTilt: 0.22,
-          energyAttack: 0.52,
-          energyRelease: 0.05,
-          glowSpread: 0.62,
-          formAlpha: 0.97,
-          formGlow: 28,
+          releaseImpulse: 0.06,
+          attackTilt: 0.62,
+          releaseTilt: 0.08,
+          energyAttack: 0.82,
+          energyRelease: 0.06,
+          glowSpread: 1.02,
+          formAlpha: 0.96,
+          formGlow: 34,
           glowColor: [255, 225, 150],
-          baseBgMix: 0.28,
+          baseBgMix: 0.30,
           bgContrast: 1.55,
-          invertMode: false
+          invertMode: false,
+          centerBoost: 0.12,
+          formDarken: 0.0
         };
       }
 
       return {
-        name: "Inversion",
+        name: "Inverse",
         baseSize: 0.03,
-        scaleGain: 0.50,
+        scaleGain: 0.48,
         maxScale: 3.0,
         brightnessBase: 0.08,
-        brightnessGain: 0.70,
+        brightnessGain: 0.78,
         inactiveBrightness: 0.04,
-        attackImpulse: 0.82,
-        releaseImpulse: 0.05,
-        attackTilt: 0.32,
-        releaseTilt: 0.20,
-        energyAttack: 0.55,
-        energyRelease: 0.05,
-        glowSpread: 0.70,
+        attackImpulse: 0.86,
+        releaseImpulse: 0.06,
+        attackTilt: 0.66,
+        releaseTilt: 0.08,
+        energyAttack: 0.82,
+        energyRelease: 0.06,
+        glowSpread: 1.05,
         formAlpha: 0.72,
-        formGlow: 18,
+        formGlow: 42,
         glowColor: [255, 255, 255],
-        baseBgMix: 0.08,
-        bgContrast: 1.2,
-        invertMode: true
+        baseBgMix: 0.10,
+        bgContrast: 1.15,
+        invertMode: true,
+        centerBoost: 0.10,
+        formDarken: 0.45
       };
     }
 
@@ -264,6 +288,14 @@
       gamma = e.gamma || 0;
     }
 
+    function updateSceneBlend() {
+      const target = sceneSelect.value;
+      sceneA = attackRelease(sceneA, target === "A" ? 1 : 0, 0.12, 0.12);
+      sceneB = attackRelease(sceneB, target === "B" ? 1 : 0, 0.12, 0.12);
+      sceneC = attackRelease(sceneC, target === "C" ? 1 : 0, 0.12, 0.12);
+      sceneD = attackRelease(sceneD, target === "D" ? 1 : 0, 0.12, 0.12);
+    }
+
     function handleMotion(e) {
       const acc = e.accelerationIncludingGravity || e.acceleration || { x: 0, y: 0, z: 0 };
 
@@ -297,7 +329,7 @@
       statusEl.textContent =
         roleSelect.value +
         " | " + mode +
-        " | Scene " + sceneSelect.value + " (" + scene.name + ")" +
+        " | Scene " + sceneSelect.value +
         " | ax:" + ax.toFixed(2) +
         " ay:" + ay.toFixed(2) +
         " beta:" + beta.toFixed(1) +
@@ -307,15 +339,24 @@
     function drawGlow(cx, cy, rgb, alpha, w, h, spread) {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * spread);
       grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
-      grad.addColorStop(0.50, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.55})`);
+      grad.addColorStop(0.40, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.45})`);
       grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
     }
 
-    function drawShapeGlow(shadowColor, shadowBlur) {
-      ctx.shadowColor = shadowColor;
-      ctx.shadowBlur = shadowBlur;
+    function drawCenterLight(alpha, w, h) {
+      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.42);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.45, `rgba(255,255,255,${alpha * 0.25})`);
+      grad.addColorStop(1, `rgba(255,255,255,0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawShapeGlow(glowColor, glowBlur) {
+      ctx.shadowColor = `rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`;
+      ctx.shadowBlur = glowBlur;
     }
 
     function clearShapeGlow() {
@@ -325,7 +366,7 @@
 
     function drawCircle(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
       ctx.save();
-      drawShapeGlow(`rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`, glowBlur);
+      drawShapeGlow(glowColor, glowBlur);
       ctx.beginPath();
       ctx.ellipse(cx, cy, 48 * sx, 48 * sy, 0, 0, Math.PI * 2);
       ctx.fillStyle = fillStyle(alpha);
@@ -336,7 +377,7 @@
 
     function drawTriangle(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
       ctx.save();
-      drawShapeGlow(`rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`, glowBlur);
+      drawShapeGlow(glowColor, glowBlur);
       ctx.beginPath();
       ctx.moveTo(cx, cy - 42 * sy);
       ctx.lineTo(cx - 38 * sx, cy + 32 * sy);
@@ -350,7 +391,7 @@
 
     function drawSquare(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
       ctx.save();
-      drawShapeGlow(`rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`, glowBlur);
+      drawShapeGlow(glowColor, glowBlur);
       const w = 76 * sx;
       const h = 76 * sy;
       ctx.fillStyle = fillStyle(alpha);
@@ -361,7 +402,7 @@
 
     function drawPentagon(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
       ctx.save();
-      drawShapeGlow(`rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`, glowBlur);
+      drawShapeGlow(glowColor, glowBlur);
       const r = 44;
       ctx.beginPath();
       for (let i = 0; i < 5; i++) {
@@ -378,7 +419,13 @@
       ctx.restore();
     }
 
+    function sceneMixedValue(a, b, c, d) {
+      return a * sceneA + b * sceneB + c * sceneC + d * sceneD;
+    }
+
     function render() {
+      updateSceneBlend();
+
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight * 0.8;
 
@@ -388,15 +435,62 @@
       const cy = h / 2;
 
       const role = roleSelect.value;
-      const scene = getSceneParams(sceneSelect.value);
+
+      const sceneAParams = getSceneParams("A");
+      const sceneBParams = getSceneParams("B");
+      const sceneCParams = getSceneParams("C");
+      const sceneDParams = getSceneParams("D");
 
       const energyNorm = clamp(motionEnergy / 10, 0, 1.0);
+
+      const brightnessBase = sceneMixedValue(
+        sceneAParams.brightnessBase,
+        sceneBParams.brightnessBase,
+        sceneCParams.brightnessBase,
+        sceneDParams.brightnessBase
+      );
+      const brightnessGain = sceneMixedValue(
+        sceneAParams.brightnessGain,
+        sceneBParams.brightnessGain,
+        sceneCParams.brightnessGain,
+        sceneDParams.brightnessGain
+      );
+      const inactiveBrightness = sceneMixedValue(
+        sceneAParams.inactiveBrightness,
+        sceneBParams.inactiveBrightness,
+        sceneCParams.inactiveBrightness,
+        sceneDParams.inactiveBrightness
+      );
+      const baseBgMix = sceneMixedValue(
+        sceneAParams.baseBgMix,
+        sceneBParams.baseBgMix,
+        sceneCParams.baseBgMix,
+        sceneDParams.baseBgMix
+      );
+      const bgContrast = sceneMixedValue(
+        sceneAParams.bgContrast,
+        sceneBParams.bgContrast,
+        sceneCParams.bgContrast,
+        sceneDParams.bgContrast
+      );
+      const glowSpread = sceneMixedValue(
+        sceneAParams.glowSpread,
+        sceneBParams.glowSpread,
+        sceneCParams.glowSpread,
+        sceneDParams.glowSpread
+      );
+      const centerBoost = sceneMixedValue(
+        sceneAParams.centerBoost,
+        sceneBParams.centerBoost,
+        sceneCParams.centerBoost,
+        sceneDParams.centerBoost
+      );
+
       const activeBrightness = clamp(
-        scene.brightnessBase + energyNorm * scene.brightnessGain,
-        scene.brightnessBase,
+        brightnessBase + energyNorm * brightnessGain,
+        brightnessBase,
         1.0
       );
-      const inactiveBrightness = scene.inactiveBrightness;
 
       let tl = inactiveBrightness;
       let tr = inactiveBrightness;
@@ -414,50 +508,65 @@
         br = activeBrightness;
       }
 
+      const invertMix = sceneD;
+
       ctx.clearRect(0, 0, w, h);
 
-      if (!scene.invertMode) {
-        ctx.fillStyle = "rgb(5,5,5)";
-        ctx.fillRect(0, 0, w, h);
+      // mixed background base
+      const bgWhite = clamp(0.02 + invertMix * (0.10 + energyNorm * 0.75), 0.02, 0.95);
+      ctx.fillStyle = `rgba(${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},1)`;
+      ctx.fillRect(0, 0, w, h);
 
-        // base colored presence per quadrant
-        ctx.fillStyle = `rgba(255,120,200,${scene.baseBgMix * tl * scene.bgContrast})`;
-        ctx.fillRect(0, 0, w / 2, h / 2);
+      // softened quadrant bases
+      ctx.fillStyle = `rgba(255,120,200,${baseBgMix * tl * bgContrast})`;
+      ctx.fillRect(0, 0, w / 2, h / 2);
 
-        ctx.fillStyle = `rgba(120,255,120,${scene.baseBgMix * tr * scene.bgContrast})`;
-        ctx.fillRect(w / 2, 0, w / 2, h / 2);
+      ctx.fillStyle = `rgba(120,255,120,${baseBgMix * tr * bgContrast})`;
+      ctx.fillRect(w / 2, 0, w / 2, h / 2);
 
-        ctx.fillStyle = `rgba(255,100,100,${scene.baseBgMix * bl * scene.bgContrast})`;
-        ctx.fillRect(0, h / 2, w / 2, h / 2);
+      ctx.fillStyle = `rgba(255,100,100,${baseBgMix * bl * bgContrast})`;
+      ctx.fillRect(0, h / 2, w / 2, h / 2);
 
-        ctx.fillStyle = `rgba(100,120,255,${scene.baseBgMix * br * scene.bgContrast})`;
-        ctx.fillRect(w / 2, h / 2, w / 2, h / 2);
+      ctx.fillStyle = `rgba(100,120,255,${baseBgMix * br * bgContrast})`;
+      ctx.fillRect(w / 2, h / 2, w / 2, h / 2);
 
-        drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl * scene.bgContrast, w, h, scene.glowSpread);
-        drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr * scene.bgContrast, w, h, scene.glowSpread);
-        drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl * scene.bgContrast, w, h, scene.glowSpread);
-        drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br * scene.bgContrast, w, h, scene.glowSpread);
-      } else {
-        const bgWhite = clamp(0.06 + energyNorm * 0.85, 0.06, 1.0);
-        ctx.fillStyle = `rgba(255,255,255,${bgWhite})`;
-        ctx.fillRect(0, 0, w, h);
+      // always soft transitions
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl * bgContrast, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr * bgContrast, w, h, glowSpread);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl * bgContrast, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br * bgContrast, w, h, glowSpread);
 
-        // slight residual color tints
-        drawGlow(w * 0.25, h * 0.25, [255, 120, 200], 0.16 + tl * 0.25, w, h, scene.glowSpread);
-        drawGlow(w * 0.75, h * 0.25, [120, 255, 120], 0.16 + tr * 0.25, w, h, scene.glowSpread);
-        drawGlow(w * 0.25, h * 0.75, [255, 100, 100], 0.16 + bl * 0.25, w, h, scene.glowSpread);
-        drawGlow(w * 0.75, h * 0.75, [100, 120, 255], 0.16 + br * 0.25, w, h, scene.glowSpread);
+      // articulation center flash
+      if (centerBoost > 0.01) {
+        drawCenterLight(centerBoost * energyNorm, w, h);
       }
 
-      const sx = clamp(scene.baseSize + filteredX * scene.scaleGain, scene.baseSize, scene.maxScale);
-      const sy = clamp(scene.baseSize + filteredY * scene.scaleGain, scene.baseSize, scene.maxScale);
+      function getShapeParamsForScene(sceneKey) {
+        return getSceneParams(sceneKey);
+      }
 
-      function whiteFill(alpha) {
+      function getShapeScale(sceneKey) {
+        const p = getShapeParamsForScene(sceneKey);
+        return {
+          sx: clamp(p.baseSize + filteredX * p.scaleGain, p.baseSize, p.maxScale),
+          sy: clamp(p.baseSize + filteredY * p.scaleGain, p.baseSize, p.maxScale),
+          alpha: p.formAlpha * (1 - (sceneKey === "D" ? energyNorm * 0.08 : 0)),
+          glowBlur: p.formGlow,
+          glowColor: p.glowColor,
+          darken: p.formDarken,
+          invertMode: p.invertMode
+        };
+      }
+
+      function fillWhite(alpha) {
         return `rgba(255,255,255,${alpha})`;
       }
 
-      function roleFill(rgb, alpha) {
-        return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+      function fillRole(rgb, alpha, darken) {
+        const r = Math.round(rgb[0] * (1 - darken));
+        const g = Math.round(rgb[1] * (1 - darken));
+        const b = Math.round(rgb[2] * (1 - darken));
+        return `rgba(${r},${g},${b},${alpha})`;
       }
 
       const p1Color = getRoleColor("Piano1");
@@ -465,22 +574,25 @@
       const pc1Color = getRoleColor("Perc1");
       const pc2Color = getRoleColor("Perc2");
 
-      const fillP1 = scene.invertMode ? (a => roleFill(p1Color, a)) : whiteFill;
-      const fillP2 = scene.invertMode ? (a => roleFill(p2Color, a)) : whiteFill;
-      const fillPc1 = scene.invertMode ? (a => roleFill(pc1Color, a)) : whiteFill;
-      const fillPc2 = scene.invertMode ? (a => roleFill(pc2Color, a)) : whiteFill;
+      function drawRoleShape(roleName, sceneKey, drawFn, rgb) {
+        const sp = getShapeScale(sceneKey);
+        const fillFn = sp.invertMode
+          ? (a) => fillRole(rgb, a, sp.darken)
+          : (a) => fillWhite(a);
 
-      if (role === "Piano1" || role === "AllForms") {
-        drawCircle(cx, cy, sx, sy, fillP1, scene.formAlpha, scene.glowColor, scene.formGlow);
+        drawFn(cx, cy, sp.sx, sp.sy, fillFn, sp.alpha, sp.glowColor, sp.glowBlur);
       }
-      if (role === "Piano2" || role === "AllForms") {
-        drawPentagon(cx, cy, sx, sy, fillP2, scene.formAlpha, scene.glowColor, scene.formGlow);
-      }
-      if (role === "Perc1" || role === "AllForms") {
-        drawTriangle(cx, cy, sx, sy, fillPc1, scene.formAlpha, scene.glowColor, scene.formGlow);
-      }
-      if (role === "Perc2" || role === "AllForms") {
-        drawSquare(cx, cy, sx, sy, fillPc2, scene.formAlpha, scene.glowColor, scene.formGlow);
+
+      if (role === "Piano1") drawRoleShape("Piano1", sceneSelect.value, drawCircle, p1Color);
+      if (role === "Piano2") drawRoleShape("Piano2", sceneSelect.value, drawPentagon, p2Color);
+      if (role === "Perc1")  drawRoleShape("Perc1", sceneSelect.value, drawTriangle, pc1Color);
+      if (role === "Perc2")  drawRoleShape("Perc2", sceneSelect.value, drawSquare, pc2Color);
+
+      if (role === "AllForms") {
+        drawRoleShape("Piano1", "A", drawCircle, p1Color);
+        drawRoleShape("Piano2", "B", drawPentagon, p2Color);
+        drawRoleShape("Perc1", "C", drawTriangle, pc1Color);
+        drawRoleShape("Perc2", "D", drawSquare, pc2Color);
       }
 
       requestAnimationFrame(render);
