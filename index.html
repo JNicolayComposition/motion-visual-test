@@ -26,10 +26,11 @@
       gap: 10px;
       flex-wrap: wrap;
       margin-bottom: 10px;
+      padding: 0 10px;
     }
 
     select, button {
-      font-size: 18px;
+      font-size: 17px;
       padding: 10px 12px;
       border: none;
       border-radius: 8px;
@@ -41,8 +42,9 @@
 
     #status {
       margin: 6px 0 10px;
-      font-size: 15px;
+      font-size: 14px;
       opacity: 0.9;
+      padding: 0 12px;
     }
 
     canvas {
@@ -62,11 +64,18 @@
       <option value="Piano2">Piano2</option>
       <option value="Perc1">Perc1</option>
       <option value="Perc2">Perc2</option>
+      <option value="AllForms">All Forms</option>
     </select>
 
     <select id="modeSelect">
       <option value="tilt">Tilt Mode</option>
       <option value="impulse">Impulse Mode</option>
+    </select>
+
+    <select id="sceneSelect">
+      <option value="A">Scene A: Residual</option>
+      <option value="B">Scene B: Articulation</option>
+      <option value="C">Scene C: Saturation</option>
     </select>
 
     <button id="startBtn">Enable Motion</button>
@@ -82,6 +91,7 @@
     const statusEl = document.getElementById("status");
     const roleSelect = document.getElementById("roleSelect");
     const modeSelect = document.getElementById("modeSelect");
+    const sceneSelect = document.getElementById("sceneSelect");
     const startBtn = document.getElementById("startBtn");
 
     let ax = 0, ay = 0, az = 0;
@@ -101,6 +111,60 @@
       } else {
         return current * (1 - release) + target * release;
       }
+    }
+
+    function getSceneParams(scene) {
+      if (scene === "A") {
+        return {
+          baseSize: 0.02,
+          scaleGain: 0.28,
+          maxScale: 1.8,
+          brightnessBase: 0.03,
+          brightnessGain: 0.06,
+          inactiveBrightness: 0.015,
+          attackImpulse: 0.72,
+          releaseImpulse: 0.03,
+          attackTilt: 0.22,
+          releaseTilt: 0.14,
+          energyAttack: 0.35,
+          energyRelease: 0.03,
+          glowSpread: 0.80
+        };
+      }
+
+      if (scene === "B") {
+        return {
+          baseSize: 0.035,
+          scaleGain: 0.45,
+          maxScale: 2.8,
+          brightnessBase: 0.05,
+          brightnessGain: 0.10,
+          inactiveBrightness: 0.02,
+          attackImpulse: 0.78,
+          releaseImpulse: 0.045,
+          attackTilt: 0.30,
+          releaseTilt: 0.18,
+          energyAttack: 0.45,
+          energyRelease: 0.035,
+          glowSpread: 0.70
+        };
+      }
+
+      return {
+        baseSize: 0.06,
+        scaleGain: 0.68,
+        maxScale: 3.6,
+        brightnessBase: 0.08,
+        brightnessGain: 0.15,
+        inactiveBrightness: 0.03,
+        attackImpulse: 0.84,
+        releaseImpulse: 0.06,
+        attackTilt: 0.36,
+        releaseTilt: 0.22,
+        energyAttack: 0.52,
+        energyRelease: 0.05,
+        glowSpread: 0.62
+      };
     }
 
     async function startMotion() {
@@ -140,6 +204,11 @@
       }
     }
 
+    function handleOrientation(e) {
+      beta = e.beta || 0;
+      gamma = e.gamma || 0;
+    }
+
     function handleMotion(e) {
       const acc = e.accelerationIncludingGravity || e.acceleration || { x: 0, y: 0, z: 0 };
 
@@ -148,49 +217,43 @@
       az = acc.z || 0;
 
       const mode = modeSelect.value;
+      const scene = getSceneParams(sceneSelect.value);
 
       let targetX = 0;
       let targetY = 0;
 
       if (mode === "tilt") {
-        // Langsame Kippung / Lageänderung
-        targetX = clamp(Math.abs(gamma) / 18, 0, 2.2);
-        targetY = clamp(Math.abs(beta) / 22, 0, 2.2);
+        targetX = clamp(Math.abs(gamma) / 18, 0, 2.5);
+        targetY = clamp(Math.abs(beta) / 22, 0, 2.5);
 
-        filteredX = attackRelease(filteredX, targetX, 0.28, 0.18);
-        filteredY = attackRelease(filteredY, targetY, 0.28, 0.18);
-
+        filteredX = attackRelease(filteredX, targetX, scene.attackTilt, scene.releaseTilt);
+        filteredY = attackRelease(filteredY, targetY, scene.attackTilt, scene.releaseTilt);
       } else {
-        // Reine Impuls-/Beschleunigungsreaktion
-        targetX = clamp(Math.abs(ax), 0, 8);
-        targetY = clamp(Math.abs(ay), 0, 8);
+        targetX = clamp(Math.abs(ax), 0, 10);
+        targetY = clamp(Math.abs(ay), 0, 10);
 
-        filteredX = attackRelease(filteredX, targetX, 0.75, 0.045);
-        filteredY = attackRelease(filteredY, targetY, 0.75, 0.045);
+        filteredX = attackRelease(filteredX, targetX, scene.attackImpulse, scene.releaseImpulse);
+        filteredY = attackRelease(filteredY, targetY, scene.attackImpulse, scene.releaseImpulse);
       }
 
-      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 18);
-      motionEnergy = attackRelease(motionEnergy, total, 0.45, 0.035);
+      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 22);
+      motionEnergy = attackRelease(motionEnergy, total, scene.energyAttack, scene.energyRelease);
 
       statusEl.textContent =
         roleSelect.value +
         " | " + mode +
+        " | Scene " + sceneSelect.value +
         " | ax:" + ax.toFixed(2) +
         " ay:" + ay.toFixed(2) +
         " beta:" + beta.toFixed(1) +
         " gamma:" + gamma.toFixed(1);
     }
 
-    function handleOrientation(e) {
-      beta = e.beta || 0;
-      gamma = e.gamma || 0;
-    }
-
-    function drawGlow(cx, cy, rgb, alpha, w, h) {
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7);
-      grad.addColorStop(0, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + alpha + ")");
-      grad.addColorStop(0.55, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + (alpha * 0.35) + ")");
-      grad.addColorStop(1, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",0)");
+    function drawGlow(cx, cy, rgb, alpha, w, h, spread) {
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * spread);
+      grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
+      grad.addColorStop(0.55, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.35})`);
+      grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
     }
@@ -244,9 +307,14 @@
       const cy = h / 2;
 
       const role = roleSelect.value;
+      const scene = getSceneParams(sceneSelect.value);
 
-      const activeBrightness = clamp(0.05 + motionEnergy / 10, 0.05, 0.95);
-      const inactiveBrightness = 0.02;
+      const activeBrightness = clamp(
+        scene.brightnessBase + motionEnergy * scene.brightnessGain / 10,
+        scene.brightnessBase,
+        1.0
+      );
+      const inactiveBrightness = scene.inactiveBrightness;
 
       let tl = inactiveBrightness;
       let tr = inactiveBrightness;
@@ -258,23 +326,29 @@
       if (role === "Perc1") bl = activeBrightness;
       if (role === "Perc2") br = activeBrightness;
 
+      if (role === "AllForms") {
+        tl = activeBrightness;
+        tr = activeBrightness;
+        bl = activeBrightness;
+        br = activeBrightness;
+      }
+
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = "rgb(5,5,5)";
       ctx.fillRect(0, 0, w, h);
 
-      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h);
-      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h);
-      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h);
-      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h);
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h, scene.glowSpread);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h, scene.glowSpread);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h, scene.glowSpread);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h, scene.glowSpread);
 
-      // klein starten, aber sehr deutlich wachsen
-      const sx = clamp(0.03 + filteredX * 0.45, 0.03, 2.8);
-      const sy = clamp(0.03 + filteredY * 0.45, 0.03, 2.8);
+      const sx = clamp(scene.baseSize + filteredX * scene.scaleGain, scene.baseSize, scene.maxScale);
+      const sy = clamp(scene.baseSize + filteredY * scene.scaleGain, scene.baseSize, scene.maxScale);
 
-      if (role === "Piano1") drawCircle(cx, cy, sx, sy);
-      if (role === "Piano2") drawPentagon(cx, cy, sx, sy);
-      if (role === "Perc1") drawTriangle(cx, cy, sx, sy);
-      if (role === "Perc2") drawSquare(cx, cy, sx, sy);
+      if (role === "Piano1" || role === "AllForms") drawCircle(cx, cy, sx, sy);
+      if (role === "Piano2" || role === "AllForms") drawPentagon(cx, cy, sx, sy);
+      if (role === "Perc1"  || role === "AllForms") drawTriangle(cx, cy, sx, sy);
+      if (role === "Perc2"  || role === "AllForms") drawSquare(cx, cy, sx, sy);
 
       requestAnimationFrame(render);
     }
