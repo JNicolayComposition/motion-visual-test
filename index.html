@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+  margin: 0;
+  background: black;
+  color: white;
+  font-family: sans-serif;
+  text-align: center;
+}
+
+button {
+  font-size: 20px;
+  padding: 10px;
+  margin: 20px;
+}
+
+canvas {
+  width: 100vw;
+  height: 80vh;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Motion → Visual</h2>
+<button onclick="startMotion()">Enable Motion</button>
+<p id="status">waiting...</p>
+
+<canvas id="c"></canvas>
+
+<script>
+let ax=0, ay=0, az=0;
+
+function startMotion() {
+  const status = document.getElementById("status");
+
+  status.innerText = "requesting...";
+
+  try {
+    if (typeof DeviceMotionEvent !== "undefined" &&
+        typeof DeviceMotionEvent.requestPermission === "function") {
+
+      DeviceMotionEvent.requestPermission().then(response => {
+        if (response === "granted") {
+          status.innerText = "motion ON";
+          window.addEventListener("devicemotion", handler);
+        } else {
+          status.innerText = "denied";
+        }
+      });
+
+    } else {
+      status.innerText = "no permission needed";
+      window.addEventListener("devicemotion", handler);
+    }
+  } catch (e) {
+    status.innerText = "error: " + e;
+  }
+}
+
+function handler(e) {
+  ax = e.accelerationIncludingGravity.x || 0;
+  ay = e.accelerationIncludingGravity.y || 0;
+  az = e.accelerationIncludingGravity.z || 0;
+
+  document.getElementById("status").innerText =
+    `ax:${ax.toFixed(2)} ay:${ay.toFixed(2)} az:${az.toFixed(2)}`;
+}
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+function draw() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight * 0.8;
+
+  let w = canvas.width;
+  let h = canvas.height;
+
+  let intensity = Math.min(Math.abs(ax)+Math.abs(ay)+Math.abs(az), 20) / 20;
+
+  // 4 Farbflächen
+  ctx.fillStyle = `rgba(255,100,200,${intensity})`;
+  ctx.fillRect(0,0,w/2,h/2);
+
+  ctx.fillStyle = `rgba(100,255,100,${intensity})`;
+  ctx.fillRect(w/2,0,w/2,h/2);
+
+  ctx.fillStyle = `rgba(100,100,255,${intensity})`;
+  ctx.fillRect(w/2,h/2,w/2,h/2);
+
+  ctx.fillStyle = `rgba(255,100,100,${intensity})`;
+  ctx.fillRect(0,h/2,w/2,h/2);
+
+  let cx = w/2;
+  let cy = h/2;
+
+  let scaleX = 1 + Math.abs(ax)/10;
+  let scaleY = 1 + Math.abs(ay)/10;
+
+  // Kreis
+  ctx.beginPath();
+  ctx.arc(cx, cy, 80 * scaleX, 0, Math.PI*2);
+  ctx.strokeStyle = "white";
+  ctx.stroke();
+
+  // Quadrat
+  ctx.strokeRect(cx-60*scaleX, cy-60*scaleY, 120*scaleX, 120*scaleY);
+
+  // Dreieck
+  ctx.beginPath();
+  ctx.moveTo(cx, cy-80*scaleY);
+  ctx.lineTo(cx-70*scaleX, cy+60*scaleY);
+  ctx.lineTo(cx+70*scaleX, cy+60*scaleY);
+  ctx.closePath();
+  ctx.stroke();
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
