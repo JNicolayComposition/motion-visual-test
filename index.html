@@ -485,15 +485,25 @@
         drawCenterLight(centerBoost * energyNorm, w, h);
       }
 
-      function shapeState(sceneKey) {
-        const p = getSceneParams(sceneKey);
+      function motionState(motionSceneKey, visualSceneKey) {
+        const motionParams = getSceneParams(motionSceneKey);
+        const visualParams = getSceneParams(visualSceneKey);
+      
         return {
-          sx: clamp(p.baseSize + filteredX * p.scaleGain, p.baseSize, p.maxScale),
-          sy: clamp(p.baseSize + filteredY * p.scaleGain, p.baseSize, p.maxScale),
-          alpha: p.formAlpha * (1 - (sceneKey === "D" ? energyNorm * 0.10 : 0)),
-          glowBlur: p.formGlow,
-          glowColor: p.glowColor,
-          invertMode: p.invertMode
+          sx: clamp(
+            motionParams.baseSize + filteredX * motionParams.scaleGain,
+            motionParams.baseSize,
+            motionParams.maxScale
+          ),
+          sy: clamp(
+            motionParams.baseSize + filteredY * motionParams.scaleGain,
+            motionParams.baseSize,
+            motionParams.maxScale
+          ),
+          alpha: visualParams.formAlpha * (1 - (visualSceneKey === "D" ? energyNorm * 0.10 : 0)),
+          glowBlur: visualParams.formGlow,
+          glowColor: visualParams.glowColor,
+          invertMode: visualParams.invertMode
         };
       }
 
@@ -520,18 +530,21 @@
       }
 
       if (role !== "AllForms") {
-        const state = shapeState(sceneSelect.value);
-
+        const state = motionState(sceneSelect.value, sceneSelect.value);
+      
         if (role === "Piano1") drawRole(drawCircle, p1Color, state);
         if (role === "Piano2") drawRole(drawPentagon, p2Color, state);
         if (role === "Perc1") drawRole(drawTriangle, pc1Color, state);
         if (role === "Perc2") drawRole(drawSquare, pc2Color, state);
       } else {
-        // mixed behavior per form
-        drawRole(drawCircle, p1Color, shapeState("A"));
-        drawRole(drawPentagon, p2Color, shapeState("B"));
-        drawRole(drawTriangle, pc1Color, shapeState("C"));
-        drawRole(drawSquare, pc2Color, shapeState("D"));
+        // motion behavior differs per form
+        // visual coloring follows ONLY the globally selected scene
+        const visualScene = sceneSelect.value;
+      
+        drawRole(drawCircle,   p1Color,  motionState("A", visualScene));
+        drawRole(drawPentagon, p2Color,  motionState("B", visualScene));
+        drawRole(drawTriangle, pc1Color, motionState("C", visualScene));
+        drawRole(drawSquare,   pc2Color, motionState("D", visualScene));
       }
 
       requestAnimationFrame(render);
