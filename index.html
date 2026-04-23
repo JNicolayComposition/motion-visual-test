@@ -501,7 +501,7 @@
             motionParams.maxScale
           ),
           alpha: visualParams.formAlpha * (1 - (visualSceneKey === "D" ? energyNorm * 0.10 : 0)),
-          glowBlur: visualParams.formGlow,
+          glowBlur: visualParams.formGlow + filteredX * 10 + filteredY * 10 + energyNorm * 12,
           glowColor: visualParams.glowColor,
           invertMode: visualParams.invertMode
         };
