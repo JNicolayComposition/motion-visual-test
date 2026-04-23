@@ -1,241 +1,254 @@
 <!DOCTYPE html>
-<html>
 <html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body {
-  margin: 0;
-  background: black;
-  color: white;
-  font-family: sans-serif;
-  text-align: center;
-}
-
-button {
-  font-size: 20px;
-  padding: 10px;
-  margin: 20px;
-}
-
-canvas {
-  width: 100vw;
-  height: 80vh;
-}
-</style>
-</head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Motion Visual</title>
   <style>
     body {
       margin: 0;
       background: black;
       color: white;
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
       text-align: center;
       overflow: hidden;
     }
 
-<body>
     h2 {
-      margin: 14px 0 8px;
+      margin: 12px 0 8px;
       font-size: 22px;
     }
 
-<h2>Motion → Visual</h2>
-<button onclick="startMotion()">Enable Motion</button>
-<p id="status">waiting...</p>
     .controls {
       display: flex;
-      gap: 10px;
       justify-content: center;
       align-items: center;
+      gap: 10px;
       flex-wrap: wrap;
       margin-bottom: 10px;
     }
 
-<canvas id="c"></canvas>
     select, button {
       font-size: 18px;
       padding: 10px 12px;
-      border-radius: 8px;
       border: none;
+      border-radius: 8px;
     }
 
-<script>
-  const canvas = document.getElementById("c");
-  const ctx = canvas.getContext("2d");
-  const statusEl = document.getElementById("status");
-  const roleSelect = document.getElementById("roleSelect");
-
-  let ax = 0, ay = 0, az = 0;
-  let filteredX = 0;
-  let filteredY = 0;
-  let motionEnergy = 0;
-
-  function clamp(v, lo, hi) {
-    return Math.max(lo, Math.min(hi, v));
-  }
-
-  function attackRelease(current, target, attack, release) {
-    if (target > current) {
-      return current * (1 - attack) + target * attack;
-    } else {
-      return current * (1 - release) + target * release;
+    button {
+      cursor: pointer;
     }
-  }
 
-  async function startMotion() {
-    statusEl.innerText = "requesting permission...";
+    #status {
+      margin: 6px 0 10px;
+      font-size: 15px;
+      opacity: 0.9;
+    }
 
-    try {
-      if (
-        typeof DeviceMotionEvent !== "undefined" &&
-        typeof DeviceMotionEvent.requestPermission === "function"
-      ) {
-        const results = await Promise.all([
-          DeviceMotionEvent.requestPermission(),
-          typeof DeviceOrientationEvent !== "undefined" &&
-          typeof DeviceOrientationEvent.requestPermission === "function"
-            ? DeviceOrientationEvent.requestPermission()
-            : Promise.resolve("granted")
-        ]);
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 80vh;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Motion Visual</h2>
 
-        const motionPermission = results[0];
-        const orientationPermission = results[1];
+  <div class="controls">
+    <select id="roleSelect">
+      <option value="Piano1">Piano1</option>
+      <option value="Piano2">Piano2</option>
+      <option value="Perc1">Perc1</option>
+      <option value="Perc2">Perc2</option>
+    </select>
 
-        if (motionPermission === "granted" && orientationPermission === "granted") {
-          statusEl.innerText = "motion ON";
-          window.addEventListener("devicemotion", handler);
-        } else {
-          statusEl.innerText =
-            `denied: motion=${motionPermission}, orientation=${orientationPermission}`;
-        }
+    <button id="startBtn">Enable Motion</button>
+  </div>
+
+  <div id="status">waiting...</div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const roleSelect = document.getElementById("roleSelect");
+    const startBtn = document.getElementById("startBtn");
+
+    let ax = 0;
+    let ay = 0;
+    let az = 0;
+
+    let filteredX = 0;
+    let filteredY = 0;
+    let motionEnergy = 0;
+
+    function clamp(v, lo, hi) {
+      return Math.max(lo, Math.min(hi, v));
+    }
+
+    function attackRelease(current, target, attack, release) {
+      if (target > current) {
+        return current * (1 - attack) + target * attack;
       } else {
-        statusEl.innerText = "motion ON";
-        window.addEventListener("devicemotion", handler);
+        return current * (1 - release) + target * release;
       }
-    } catch (e) {
-      statusEl.innerText = "error: " + e;
     }
-  }
 
-  function handler(e) {
-    const acc = e.accelerationIncludingGravity || e.acceleration || {x:0,y:0,z:0};
+    async function startMotion() {
+      statusEl.textContent = "requesting permission...";
 
-    ax = acc.x || 0;
-    ay = acc.y || 0;
-    az = acc.z || 0;
+      try {
+        const needsPermission =
+          typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function";
 
-    const targetX = clamp(Math.abs(ax), 0, 8);
-    const targetY = clamp(Math.abs(ay), 0, 8);
-    const total = Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81);
+        if (needsPermission) {
+          const motionPermission = await DeviceMotionEvent.requestPermission();
+          let orientationPermission = "granted";
 
-    filteredX = attackRelease(filteredX, targetX, 0.55, 0.06);
-    filteredY = attackRelease(filteredY, targetY, 0.55, 0.06);
-    motionEnergy = attackRelease(motionEnergy, total, 0.50, 0.045);
+          if (
+            typeof DeviceOrientationEvent !== "undefined" &&
+            typeof DeviceOrientationEvent.requestPermission === "function"
+          ) {
+            orientationPermission = await DeviceOrientationEvent.requestPermission();
+          }
 
-    statusEl.innerText =
-      `${roleSelect.value} | ax:${ax.toFixed(2)} ay:${ay.toFixed(2)} az:${az.toFixed(2)}`;
-  }
-
-  function drawCircle(cx, cy, rx, ry) {
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "white";
-    ctx.fill();
-  }
-
-  function drawTriangle(cx, cy, sx, sy) {
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 50 * sy);
-    ctx.lineTo(cx - 45 * sx, cy + 38 * sy);
-    ctx.lineTo(cx + 45 * sx, cy + 38 * sy);
-    ctx.closePath();
-    ctx.fillStyle = "white";
-    ctx.fill();
-  }
-
-  function drawSquare(cx, cy, sx, sy) {
-    const w = 90 * sx;
-    const h = 90 * sy;
-    ctx.fillStyle = "white";
-    ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
-  }
-
-  function drawPentagon(cx, cy, sx, sy) {
-    const r = 52;
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const a = -Math.PI / 2 + i * (2 * Math.PI / 5);
-      const x = cx + Math.cos(a) * r * sx;
-      const y = cy + Math.sin(a) * r * sy;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+          if (motionPermission === "granted" && orientationPermission === "granted") {
+            window.addEventListener("devicemotion", handleMotion);
+            statusEl.textContent = "motion ON";
+          } else {
+            statusEl.textContent =
+              "denied: motion=" + motionPermission + ", orientation=" + orientationPermission;
+          }
+        } else {
+          window.addEventListener("devicemotion", handleMotion);
+          statusEl.textContent = "motion ON";
+        }
+      } catch (e) {
+        statusEl.textContent = "error: " + e;
+      }
     }
-    ctx.closePath();
-    ctx.fillStyle = "white";
-    ctx.fill();
-  }
 
-  function draw() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight * 0.80;
+    function handleMotion(e) {
+      const acc = e.accelerationIncludingGravity || e.acceleration || { x: 0, y: 0, z: 0 };
 
-    const w = canvas.width;
-    const h = canvas.height;
+      ax = acc.x || 0;
+      ay = acc.y || 0;
+      az = acc.z || 0;
 
-    const role = roleSelect.value;
+      const targetX = clamp(Math.abs(ax), 0, 8);
+      const targetY = clamp(Math.abs(ay), 0, 8);
+      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 18);
 
-    const activeBrightness = clamp(0.08 + motionEnergy / 10, 0.08, 1.0);
-    const inactiveBrightness = 0.035;
+      filteredX = attackRelease(filteredX, targetX, 0.55, 0.05);
+      filteredY = attackRelease(filteredY, targetY, 0.55, 0.05);
+      motionEnergy = attackRelease(motionEnergy, total, 0.45, 0.035);
 
-    let tl = inactiveBrightness;
-    let tr = inactiveBrightness;
-    let bl = inactiveBrightness;
-    let br = inactiveBrightness;
+      statusEl.textContent =
+        roleSelect.value +
+        " | ax:" + ax.toFixed(2) +
+        " ay:" + ay.toFixed(2) +
+        " az:" + az.toFixed(2);
+    }
 
-    if (role === "Piano1") tl = activeBrightness;
-    if (role === "Piano2") tr = activeBrightness;
-    if (role === "Perc1") bl = activeBrightness;
-    if (role === "Perc2") br = activeBrightness;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = `rgb(6,6,6)`;
-    ctx.fillRect(0, 0, w, h);
-
-    function drawGlow(cx, cy, color, alpha) {
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.65);
-      grad.addColorStop(0, `rgba(${color[0]},${color[1]},${color[2]},${alpha})`);
-      grad.addColorStop(0.55, `rgba(${color[0]},${color[1]},${color[2]},${alpha * 0.35})`);
-      grad.addColorStop(1, `rgba(${color[0]},${color[1]},${color[2]},0)`);
+    function drawGlow(cx, cy, rgb, alpha, w, h) {
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.7);
+      grad.addColorStop(0, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + alpha + ")");
+      grad.addColorStop(0.55, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + (alpha * 0.35) + ")");
+      grad.addColorStop(1, "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",0)");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
     }
 
-    drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl);
-    drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr);
-    drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl);
-    drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br);
-
-    const sx = clamp(0.06 + filteredX / 12, 0.06, 1.2);
-    const sy = clamp(0.06 + filteredY / 12, 0.06, 1.2);
-
-    const cx = w / 2;
-    const cy = h / 2;
-
-    if (role === "Piano1") {
-      drawCircle(cx, cy, 55 * sx, 55 * sy);
-    } else if (role === "Piano2") {
-      drawPentagon(cx, cy, sx, sy);
-    } else if (role === "Perc1") {
-      drawTriangle(cx, cy, sx, sy);
-    } else if (role === "Perc2") {
-      drawSquare(cx, cy, sx, sy);
+    function drawCircle(cx, cy, sx, sy) {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 48 * sx, 48 * sy, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "white";
+      ctx.fill();
     }
 
-    requestAnimationFrame(draw);
-  }
+    function drawTriangle(cx, cy, sx, sy) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 42 * sy);
+      ctx.lineTo(cx - 38 * sx, cy + 32 * sy);
+      ctx.lineTo(cx + 38 * sx, cy + 32 * sy);
+      ctx.closePath();
+      ctx.fillStyle = "white";
+      ctx.fill();
+    }
 
-  draw();
-</script>
+    function drawSquare(cx, cy, sx, sy) {
+      const w = 76 * sx;
+      const h = 76 * sy;
+      ctx.fillStyle = "white";
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    }
+
+    function drawPentagon(cx, cy, sx, sy) {
+      const r = 44;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+        const x = cx + Math.cos(a) * r * sx;
+        const y = cy + Math.sin(a) * r * sy;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "white";
+      ctx.fill();
+    }
+
+    function render() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight * 0.8;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      const role = roleSelect.value;
+
+      const activeBrightness = clamp(0.05 + motionEnergy / 10, 0.05, 0.95);
+      const inactiveBrightness = 0.02;
+
+      let tl = inactiveBrightness;
+      let tr = inactiveBrightness;
+      let bl = inactiveBrightness;
+      let br = inactiveBrightness;
+
+      if (role === "Piano1") tl = activeBrightness;
+      if (role === "Piano2") tr = activeBrightness;
+      if (role === "Perc1") bl = activeBrightness;
+      if (role === "Perc2") br = activeBrightness;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "rgb(5,5,5)";
+      ctx.fillRect(0, 0, w, h);
+
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h);
+
+      const sx = clamp(0.04 + filteredX / 10, 0.04, 1.35);
+      const sy = clamp(0.04 + filteredY / 10, 0.04, 1.35);
+
+      if (role === "Piano1") drawCircle(cx, cy, sx, sy);
+      if (role === "Piano2") drawPentagon(cx, cy, sx, sy);
+      if (role === "Perc1") drawTriangle(cx, cy, sx, sy);
+      if (role === "Perc2") drawSquare(cx, cy, sx, sy);
+
+      requestAnimationFrame(render);
+    }
+
+    startBtn.addEventListener("click", startMotion);
+    render();
+  </script>
+</body>
+</html>
