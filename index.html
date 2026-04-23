@@ -63,8 +63,8 @@
     ay = acc.y || 0;
     az = acc.z || 0;
 
-    const targetX = Math.abs(ax);
-    const targetY = Math.abs(ay);
+    const targetX = clamp(Math.abs(ax), 0, 8);
+    const targetY = clamp(Math.abs(ay), 0, 8);
     const total = Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81);
 
     filteredX = attackRelease(filteredX, targetX, 0.55, 0.06);
@@ -154,8 +154,8 @@
     drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl);
     drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br);
 
-    const sx = clamp(0.10 + filteredX / 3.2, 0.10, 2.4);
-    const sy = clamp(0.10 + filteredY / 3.2, 0.10, 2.4);
+    const sx = clamp(0.06 + filteredX / 12, 0.06, 1.2);
+    const sy = clamp(0.06 + filteredY / 12, 0.06, 1.2);
 
     const cx = w / 2;
     const cy = h / 2;
