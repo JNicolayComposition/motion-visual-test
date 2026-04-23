@@ -1,3 +1,67 @@
+<!DOCTYPE html>
+<html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+  margin: 0;
+  background: black;
+  color: white;
+  font-family: sans-serif;
+  text-align: center;
+}
+
+button {
+  font-size: 20px;
+  padding: 10px;
+  margin: 20px;
+}
+
+canvas {
+  width: 100vw;
+  height: 80vh;
+}
+</style>
+</head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motion Visual</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+      overflow: hidden;
+    }
+
+<body>
+    h2 {
+      margin: 14px 0 8px;
+      font-size: 22px;
+    }
+
+<h2>Motion → Visual</h2>
+<button onclick="startMotion()">Enable Motion</button>
+<p id="status">waiting...</p>
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+<canvas id="c"></canvas>
+    select, button {
+      font-size: 18px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: none;
+    }
+
 <script>
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
