@@ -64,6 +64,11 @@
       <option value="Perc2">Perc2</option>
     </select>
 
+    <select id="modeSelect">
+      <option value="tilt">Tilt Mode</option>
+      <option value="impulse">Impulse Mode</option>
+    </select>
+
     <button id="startBtn">Enable Motion</button>
   </div>
 
@@ -76,11 +81,11 @@
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
     const roleSelect = document.getElementById("roleSelect");
+    const modeSelect = document.getElementById("modeSelect");
     const startBtn = document.getElementById("startBtn");
 
-    let ax = 0;
-    let ay = 0;
-    let az = 0;
+    let ax = 0, ay = 0, az = 0;
+    let beta = 0, gamma = 0;
 
     let filteredX = 0;
     let filteredY = 0;
@@ -119,6 +124,7 @@
 
           if (motionPermission === "granted" && orientationPermission === "granted") {
             window.addEventListener("devicemotion", handleMotion);
+            window.addEventListener("deviceorientation", handleOrientation);
             statusEl.textContent = "motion ON";
           } else {
             statusEl.textContent =
@@ -126,6 +132,7 @@
           }
         } else {
           window.addEventListener("devicemotion", handleMotion);
+          window.addEventListener("deviceorientation", handleOrientation);
           statusEl.textContent = "motion ON";
         }
       } catch (e) {
@@ -140,19 +147,43 @@
       ay = acc.y || 0;
       az = acc.z || 0;
 
-      const targetX = clamp(Math.abs(ax), 0, 8);
-      const targetY = clamp(Math.abs(ay), 0, 8);
-      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 18);
+      const mode = modeSelect.value;
 
-      filteredX = attackRelease(filteredX, targetX, 0.55, 0.05);
-      filteredY = attackRelease(filteredY, targetY, 0.55, 0.05);
+      let targetX = 0;
+      let targetY = 0;
+
+      if (mode === "tilt") {
+        // Langsame Kippung / Lageänderung
+        targetX = clamp(Math.abs(gamma) / 18, 0, 2.2);
+        targetY = clamp(Math.abs(beta) / 22, 0, 2.2);
+
+        filteredX = attackRelease(filteredX, targetX, 0.28, 0.18);
+        filteredY = attackRelease(filteredY, targetY, 0.28, 0.18);
+
+      } else {
+        // Reine Impuls-/Beschleunigungsreaktion
+        targetX = clamp(Math.abs(ax), 0, 8);
+        targetY = clamp(Math.abs(ay), 0, 8);
+
+        filteredX = attackRelease(filteredX, targetX, 0.75, 0.045);
+        filteredY = attackRelease(filteredY, targetY, 0.75, 0.045);
+      }
+
+      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 18);
       motionEnergy = attackRelease(motionEnergy, total, 0.45, 0.035);
 
       statusEl.textContent =
         roleSelect.value +
+        " | " + mode +
         " | ax:" + ax.toFixed(2) +
         " ay:" + ay.toFixed(2) +
-        " az:" + az.toFixed(2);
+        " beta:" + beta.toFixed(1) +
+        " gamma:" + gamma.toFixed(1);
+    }
+
+    function handleOrientation(e) {
+      beta = e.beta || 0;
+      gamma = e.gamma || 0;
     }
 
     function drawGlow(cx, cy, rgb, alpha, w, h) {
@@ -236,8 +267,9 @@
       drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h);
       drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h);
 
-      const sx = clamp(0.04 + filteredX / 10, 0.04, 1.35);
-      const sy = clamp(0.04 + filteredY / 10, 0.04, 1.35);
+      // klein starten, aber sehr deutlich wachsen
+      const sx = clamp(0.03 + filteredX * 0.45, 0.03, 2.8);
+      const sy = clamp(0.03 + filteredY * 0.45, 0.03, 2.8);
 
       if (role === "Piano1") drawCircle(cx, cy, sx, sy);
       if (role === "Piano2") drawPentagon(cx, cy, sx, sy);
