@@ -152,6 +152,31 @@
           invertMode: false
         };
       }
+      if (scene === "B") {
+        return {
+          name: "Articulation",
+          baseSize: 0.03,
+          scaleGain: 0.38,
+          maxScale: 2.4,
+          brightnessBase: 0.26,
+          brightnessGain: 0.24,
+          globalAmbient: 0.20,
+          attackImpulse: 0.88,
+          releaseImpulse: 0.18,
+          attackTilt: 0.65,
+          releaseTilt: 0.18,
+          energyAttack: 0.80,
+          energyRelease: 0.14,
+          glowSpread: 1.38,
+          formAlpha: 1.0,
+          formGlow: 10,
+          glowColor: [255, 255, 255],
+          centerBoost: 0.72,
+          invertMode: false,
+          bgPulse: 0.05,
+          bgMotionBoost: 0.55
+        };
+      }
 
       if (scene === "C") {
         return {
@@ -176,30 +201,6 @@
           invertMode: false,
           bgPulse: 0.03,
           bgMotionBoost: 0.95
-        };
-      }
-
-      if (scene === "C") {
-        return {
-          name: "Saturation",
-          baseSize: 0.05,
-          scaleGain: 0.58,
-          maxScale: 3.35,
-          brightnessBase: 0.32,
-          brightnessGain: 0.34,
-          globalAmbient: 0.22,
-          attackImpulse: 0.86,
-          releaseImpulse: 0.06,
-          attackTilt: 0.62,
-          releaseTilt: 0.08,
-          energyAttack: 0.82,
-          energyRelease: 0.06,
-          glowSpread: 1.25,
-          formAlpha: 0.96,
-          formGlow: 34,
-          glowColor: [255, 225, 150],
-          centerBoost: 0.12,
-          invertMode: false
         };
       }
 
