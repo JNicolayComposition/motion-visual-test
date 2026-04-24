@@ -43,7 +43,6 @@ canvas{display:block;width:100vw;height:76vh;touch-action:none}
 <input id="serverInput" />
 <button id="connectBtn">Connect</button>
 <button id="startBtn">Enable Motion</button>
-
 <button id="fullscreenBtn">Fullscreen</button>
 <button id="wakeBtn">Keep Awake</button>
 </div>
@@ -72,32 +71,22 @@ ws.onerror=()=>{statusEl.textContent="websocket error"};
 }
 connectBtn.onclick=connectWs;
 
-/* FULLSCREEN */
 document.getElementById("fullscreenBtn").onclick=()=>{
 document.documentElement.requestFullscreen().catch(e=>console.log(e));
 };
 
-/* WAKE LOCK */
 let wakeLock=null;
-
 async function enableWakeLock(){
-try{
-wakeLock=await navigator.wakeLock.request("screen");
-}catch(e){console.log(e)}
+try{wakeLock=await navigator.wakeLock.request("screen");}
+catch(e){console.log(e)}
 }
-
 document.getElementById("wakeBtn").onclick=enableWakeLock;
-
 document.addEventListener("visibilitychange",()=>{
-if(wakeLock!==null && document.visibilityState==="visible"){
-enableWakeLock();
-}
+if(wakeLock!==null && document.visibilityState==="visible")enableWakeLock();
 });
 
-/* MOTION */
 async function startMotion(){
 statusEl.textContent="requesting permission...";
-
 try{
 const needs=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
@@ -128,9 +117,11 @@ statusEl.textContent="error: "+e;
 }
 startBtn.onclick=startMotion;
 
-function handleOrientation(e){beta=e.beta||0;gamma=e.gamma||0}
+function handleOrientation(e){
+beta=e.beta||0;
+gamma=e.gamma||0;
+}
 
-/* SEND */
 function sendState(){
 if(!connected||!ws||ws.readyState!==1)return;
 ws.send(JSON.stringify({
@@ -141,11 +132,12 @@ scene:sceneSelect.value,
 source:"phone",
 sx:Number(filteredX.toFixed(4)),
 sy:Number(filteredY.toFixed(4)),
-energy:Number(motionEnergy.toFixed(4))
+energy:Number(motionEnergy.toFixed(4)),
+tiltX:Number(gamma.toFixed(4)),
+tiltY:Number(beta.toFixed(4))
 }));
 }
 
-/* MOTION HANDLER */
 function handleMotion(e){
 const acc=e.accelerationIncludingGravity||e.acceleration||{x:0,y:0,z:0};
 ax=acc.x||0;ay=acc.y||0;az=acc.z||0;
@@ -172,11 +164,9 @@ statusEl.textContent=`${roleSelect.value} | ${modeSelect.value} | Scene ${sceneS
 sendState();
 }
 
-/* TOUCH FALLBACK */
 function enableTouchFallback(){
 canvas.addEventListener("pointerdown",handleTouch);
 canvas.addEventListener("pointermove",handleTouch);
-
 canvas.addEventListener("pointerup",()=>{
 lastTouchX=null;
 lastTouchY=null;
@@ -204,10 +194,12 @@ filteredX=x*4.0;
 filteredY=y*4.0;
 motionEnergy=clamp(1.5+speed*3.0,0,10);
 
+gamma=(x-.5)*90;
+beta=(y-.5)*90;
+
 sendState();
 }
 
-/* SCENE */
 function getSceneParams(scene){
 if(scene==="A")return{attackImpulse:.18,releaseImpulse:.07,attackTilt:.14,releaseTilt:.08,energyAttack:.18,energyRelease:.06,baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
 if(scene==="B")return{attackImpulse:.88,releaseImpulse:.18,attackTilt:.65,releaseTilt:.18,energyAttack:.80,energyRelease:.14,baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:10,glowColor:[255,255,255],invertMode:false};
@@ -223,7 +215,6 @@ if(role==="Perc2")return[100,120,255];
 return[255,255,255];
 }
 
-/* VISUAL */
 function drawGlow(cx,cy,rgb,alpha,w,h,spread){
 const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*spread);
 g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
@@ -240,7 +231,6 @@ canvas.height=window.innerHeight*.76;
 const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
 const scene=getSceneParams(sceneSelect.value);
 const e=clamp(motionEnergy/10,0,1);
-
 const active=clamp(scene.brightnessBase+e*scene.brightnessGain,scene.brightnessBase,1);
 
 ctx.clearRect(0,0,w,h);
