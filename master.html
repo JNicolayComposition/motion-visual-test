@@ -59,7 +59,7 @@ state[r]={sx:0,sy:0,energy:0,tiltX:0,tiltY:0,mode:"impulse",scene:"A",source:"no
 
 let visual={};
 for(const r of roles){
-visual[r]={sx:0,sy:0,energy:0,x:0,y:0,vx:0,vy:0,ready:true};
+visual[r]={sx:0,sy:0,energy:0,x:0,y:0,vx:0,vy:0,ready:true,initialized:false};
 }
 
 serverInput.value="wss://motion-websocket-server.onrender.com";
@@ -126,7 +126,6 @@ return[1,1];
 }
 
 let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
-
 let particles=[];
 let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 
@@ -253,19 +252,54 @@ ctx.fillRect(-38*sx,-38*sy,76*sx,76*sy);
 }
 }
 
+function strokePath(role,sx,sy){
+if(role==="Piano1"){
+ctx.beginPath();
+ctx.ellipse(0,0,48*sx,48*sy,0,0,Math.PI*2);
+ctx.stroke();
+}
+else if(role==="Piano2"){
+const r=44;
+ctx.beginPath();
+for(let i=0;i<5;i++){
+const a=-Math.PI/2+i*2*Math.PI/5;
+const x=Math.cos(a)*r*sx;
+const y=Math.sin(a)*r*sy;
+if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+}
+ctx.closePath();
+ctx.stroke();
+}
+else if(role==="Perc1"){
+ctx.beginPath();
+ctx.moveTo(0,-42*sy);
+ctx.lineTo(-38*sx,32*sy);
+ctx.lineTo(38*sx,32*sy);
+ctx.closePath();
+ctx.stroke();
+}
+else{
+ctx.strokeRect(-38*sx,-38*sy,76*sx,76*sy);
+}
+}
+
 function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0,is3D=false){
 ctx.save();
 ctx.translate(cx,cy);
 ctx.rotate(rotation);
 
 if(is3D){
-for(let i=14;i>0;i--){
 ctx.save();
-ctx.translate(i*2.2,-i*1.4);
-ctx.fillStyle=`rgba(120,140,180,${0.018+i*.006})`;
-drawPath(role,sx,sy);
+ctx.translate(7,-7);
+ctx.fillStyle="rgba(120,140,180,0.22)";
+drawPath(role,sx*1.01,sy*1.01);
 ctx.restore();
-}
+
+ctx.save();
+ctx.translate(-5,5);
+ctx.fillStyle="rgba(255,255,255,0.16)";
+drawPath(role,sx*0.96,sy*0.96);
+ctx.restore();
 }
 
 ctx.shadowColor=glow;
@@ -274,12 +308,26 @@ ctx.fillStyle=fill;
 drawPath(role,sx,sy);
 
 if(is3D){
+ctx.save();
+ctx.globalAlpha=.35;
+ctx.translate(-10,-12);
+ctx.scale(.72,.72);
+ctx.fillStyle="rgba(255,255,255,.38)";
+drawPath(role,sx,sy);
+ctx.restore();
+
 ctx.lineWidth=1.2;
 ctx.strokeStyle="rgba(255,255,255,.35)";
-ctx.stroke();
+strokePath(role,sx,sy);
 }
 
 ctx.restore();
+}
+
+function smoothValue(current,target,attack,release){
+return target>current
+?current*(1-attack)+target*attack
+:current*(1-release)+target*release;
 }
 
 function render(){
@@ -326,9 +374,12 @@ const targetSx=st.sx||0;
 const targetSy=st.sy||0;
 const targetEnergy=st.energy||0;
 
-visual[r].sx=lerp(visual[r].sx,targetSx,targetSx>visual[r].sx?.26:.035);
-visual[r].sy=lerp(visual[r].sy,targetSy,targetSy>visual[r].sy?.26:.035);
-visual[r].energy=lerp(visual[r].energy,targetEnergy,targetEnergy>visual[r].energy?.30:.045);
+const attack=scn==="A"?.38:scn==="B"?.82:scn==="C"?.78:.72;
+const release=scn==="A"?.045:scn==="B"?.11:scn==="C"?.055:.05;
+
+visual[r].sx=smoothValue(visual[r].sx,targetSx,attack,release);
+visual[r].sy=smoothValue(visual[r].sy,targetSy,attack,release);
+visual[r].energy=smoothValue(visual[r].energy,targetEnergy,.82,.06);
 
 const e=clamp(visual[r].energy/10,0,1);
 
@@ -362,23 +413,25 @@ rotation=rotations[r];
 if(scn==="C"){
 const dir=getRoleDirection(r);
 const projection=clamp((tiltX*dir[0]+tiltY*dir[1])/2,0,1);
-const bounceTarget=projection*0.34;
+const bounceTarget=projection*.34;
 
 const targetX=cx+dir[0]*w*bounceTarget;
 const targetY=cy+dir[1]*h*bounceTarget;
 
-visual[r].vx+=(targetX-visual[r].x)*.045;
-visual[r].vy+=(targetY-visual[r].y)*.045;
-visual[r].vx*=.78;
-visual[r].vy*=.78;
-
-visual[r].x+=visual[r].vx;
-visual[r].y+=visual[r].vy;
-
-if(!visual[r].x&&!visual[r].y){
+if(!visual[r].initialized){
 visual[r].x=cx;
 visual[r].y=cy;
+visual[r].vx=0;
+visual[r].vy=0;
+visual[r].initialized=true;
 }
+
+visual[r].vx+=(targetX-visual[r].x)*.075;
+visual[r].vy+=(targetY-visual[r].y)*.075;
+visual[r].vx*=.84;
+visual[r].vy*=.84;
+visual[r].x+=visual[r].vx;
+visual[r].y+=visual[r].vy;
 
 drawX=visual[r].x;
 drawY=visual[r].y;
@@ -392,8 +445,7 @@ visual[r].y=lerp(visual[r].y||cy,cy,.06);
 }
 
 const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
-
-if(scaleNorm<.58){visual[r].ready=true;}
+if(scaleNorm<.58)visual[r].ready=true;
 
 const now=Date.now();
 const cooldown=scn==="C"?1400:scn==="D"?1600:99999;
