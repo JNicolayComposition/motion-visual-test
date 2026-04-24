@@ -4,14 +4,18 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Motion Client</title>
+
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
-h2{margin:12px 0 8px;font-size:22px}.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:0 10px}
-select,button,input{font-size:16px;padding:10px 12px;border:none;border-radius:8px}input{width:230px}
+h2{margin:12px 0 8px;font-size:22px}
+.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:0 10px}
+select,button,input{font-size:16px;padding:10px 12px;border:none;border-radius:8px}
+input{width:230px}
 #status{margin:6px 0 10px;font-size:14px;opacity:.9;padding:0 12px}
 canvas{display:block;width:100vw;height:76vh;touch-action:none}
 </style>
 </head>
+
 <body>
 
 <h2>Motion Client</h2>
@@ -40,10 +44,8 @@ canvas{display:block;width:100vw;height:76vh;touch-action:none}
 <button id="connectBtn">Connect</button>
 <button id="startBtn">Enable Motion</button>
 
-<!-- NEU -->
 <button id="fullscreenBtn">Fullscreen</button>
 <button id="wakeBtn">Keep Awake</button>
-
 </div>
 
 <div id="status">not connected</div>
@@ -57,40 +59,31 @@ const startBtn=document.getElementById("startBtn"),connectBtn=document.getElemen
 let ws=null,connected=false,ax=0,ay=0,az=0,beta=0,gamma=0,filteredX=0,filteredY=0,motionEnergy=0;
 let touchMode=false,lastTouchX=null,lastTouchY=null;
 
-function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
-function attackRelease(c,t,a,r){return t>c?c*(1-a)+t*a:c*(1-r)+t*r;}
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function attackRelease(c,t,a,r){return t>c?c*(1-a)+t*a:c*(1-r)+t*r}
 
 serverInput.value="wss://motion-websocket-server.onrender.com";
 
 function connectWs(){
-try{
 ws=new WebSocket(serverInput.value.trim());
 ws.onopen=()=>{connected=true;statusEl.textContent="connected"};
 ws.onclose=()=>{connected=false;statusEl.textContent="disconnected"};
 ws.onerror=()=>{statusEl.textContent="websocket error"};
-}catch(e){statusEl.textContent="connect error: "+e}
 }
 connectBtn.onclick=connectWs;
 
-/* ======================
-   FULLSCREEN
-====================== */
+/* FULLSCREEN */
 document.getElementById("fullscreenBtn").onclick=()=>{
 document.documentElement.requestFullscreen().catch(e=>console.log(e));
 };
 
-/* ======================
-   WAKE LOCK
-====================== */
+/* WAKE LOCK */
 let wakeLock=null;
 
 async function enableWakeLock(){
 try{
 wakeLock=await navigator.wakeLock.request("screen");
-statusEl.textContent="Wake Lock active";
-}catch(e){
-console.log(e);
-}
+}catch(e){console.log(e)}
 }
 
 document.getElementById("wakeBtn").onclick=enableWakeLock;
@@ -101,11 +94,10 @@ enableWakeLock();
 }
 });
 
-/* ======================
-   MOTION
-====================== */
+/* MOTION */
 async function startMotion(){
 statusEl.textContent="requesting permission...";
+
 try{
 const needs=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
@@ -122,16 +114,14 @@ window.addEventListener("devicemotion",handleMotion);
 window.addEventListener("deviceorientation",handleOrientation);
 statusEl.textContent="motion ON";
 }else{
-statusEl.textContent="motion denied → touch fallback active";
+statusEl.textContent="motion denied → touch fallback";
 enableTouchFallback();
 }
-
 }else{
 window.addEventListener("devicemotion",handleMotion);
 window.addEventListener("deviceorientation",handleOrientation);
 statusEl.textContent="motion ON";
 }
-
 }catch(e){
 statusEl.textContent="error: "+e;
 }
@@ -140,9 +130,7 @@ startBtn.onclick=startMotion;
 
 function handleOrientation(e){beta=e.beta||0;gamma=e.gamma||0}
 
-/* ======================
-   SEND
-====================== */
+/* SEND */
 function sendState(){
 if(!connected||!ws||ws.readyState!==1)return;
 ws.send(JSON.stringify({
@@ -157,15 +145,10 @@ energy:Number(motionEnergy.toFixed(4))
 }));
 }
 
-/* ======================
-   MOTION HANDLER
-====================== */
+/* MOTION HANDLER */
 function handleMotion(e){
 const acc=e.accelerationIncludingGravity||e.acceleration||{x:0,y:0,z:0};
-
-ax=acc.x||0;
-ay=acc.y||0;
-az=acc.z||0;
+ax=acc.x||0;ay=acc.y||0;az=acc.z||0;
 
 const scene=getSceneParams(sceneSelect.value);
 
@@ -189,12 +172,8 @@ statusEl.textContent=`${roleSelect.value} | ${modeSelect.value} | Scene ${sceneS
 sendState();
 }
 
-/* ======================
-   TOUCH FALLBACK
-====================== */
+/* TOUCH FALLBACK */
 function enableTouchFallback(){
-touchMode=true;
-
 canvas.addEventListener("pointerdown",handleTouch);
 canvas.addEventListener("pointermove",handleTouch);
 
@@ -212,7 +191,6 @@ const x=clamp((e.clientX-rect.left)/rect.width,0,1);
 const y=clamp((e.clientY-rect.top)/rect.height,0,1);
 
 let speed=0;
-
 if(lastTouchX!==null){
 const dx=x-lastTouchX;
 const dy=y-lastTouchY;
@@ -226,14 +204,10 @@ filteredX=x*4.0;
 filteredY=y*4.0;
 motionEnergy=clamp(1.5+speed*3.0,0,10);
 
-statusEl.textContent=`TOUCH | sx:${filteredX.toFixed(2)} sy:${filteredY.toFixed(2)} e:${motionEnergy.toFixed(2)} ${connected?"| ws ok":"| ws off"}`;
-
 sendState();
 }
 
-/* ======================
-   SCENE PARAMS
-====================== */
+/* SCENE */
 function getSceneParams(scene){
 if(scene==="A")return{attackImpulse:.18,releaseImpulse:.07,attackTilt:.14,releaseTilt:.08,energyAttack:.18,energyRelease:.06,baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
 if(scene==="B")return{attackImpulse:.88,releaseImpulse:.18,attackTilt:.65,releaseTilt:.18,energyAttack:.80,energyRelease:.14,baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:10,glowColor:[255,255,255],invertMode:false};
@@ -241,28 +215,83 @@ if(scene==="C")return{attackImpulse:.86,releaseImpulse:.06,attackTilt:.62,releas
 return{attackImpulse:.86,releaseImpulse:.06,attackTilt:.66,releaseTilt:.08,energyAttack:.82,energyRelease:.06,baseSize:.03,scaleGain:.46,maxScale:3,brightnessBase:.10,brightnessGain:.72,globalAmbient:.14,glowSpread:1.40,formAlpha:.72,formGlow:42,glowColor:[255,255,255],invertMode:true};
 }
 
-/* ======================
-   PREVIEW
-====================== */
+function getRoleColor(role){
+if(role==="Piano1")return[255,120,200];
+if(role==="Piano2")return[120,255,120];
+if(role==="Perc1")return[255,100,100];
+if(role==="Perc2")return[100,120,255];
+return[255,255,255];
+}
+
+/* VISUAL */
+function drawGlow(cx,cy,rgb,alpha,w,h,spread){
+const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*spread);
+g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
+g.addColorStop(.38,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha*.45})`);
+g.addColorStop(1,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+ctx.fillStyle=g;
+ctx.fillRect(0,0,w,h);
+}
+
 function drawRolePreview(){
 canvas.width=window.innerWidth;
 canvas.height=window.innerHeight*.76;
 
 const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
+const scene=getSceneParams(sceneSelect.value);
+const e=clamp(motionEnergy/10,0,1);
 
+const active=clamp(scene.brightnessBase+e*scene.brightnessGain,scene.brightnessBase,1);
+
+ctx.clearRect(0,0,w,h);
 ctx.fillStyle="rgb(5,5,5)";
 ctx.fillRect(0,0,w,h);
 
-ctx.beginPath();
-ctx.arc(cx,cy,20+filteredX*40,0,Math.PI*2);
-ctx.fillStyle="white";
-ctx.fill();
+drawGlow(w*.25,h*.25,[255,120,200],roleSelect.value==="Piano1"?active:scene.globalAmbient,w,h,scene.glowSpread);
+drawGlow(w*.75,h*.25,[120,255,120],roleSelect.value==="Piano2"?active:scene.globalAmbient,w,h,scene.glowSpread);
+drawGlow(w*.25,h*.75,[255,100,100],roleSelect.value==="Perc1"?active:scene.globalAmbient,w,h,scene.glowSpread);
+drawGlow(w*.75,h*.75,[100,120,255],roleSelect.value==="Perc2"?active:scene.globalAmbient,w,h,scene.glowSpread);
+
+const sx=clamp(scene.baseSize+filteredX*scene.scaleGain,scene.baseSize,scene.maxScale);
+const sy=clamp(scene.baseSize+filteredY*scene.scaleGain,scene.baseSize,scene.maxScale);
+
+ctx.save();
+ctx.shadowColor=`rgba(${scene.glowColor[0]},${scene.glowColor[1]},${scene.glowColor[2]},.95)`;
+ctx.shadowBlur=scene.formGlow+filteredX*8+filteredY*8+e*12;
+
+const col=getRoleColor(roleSelect.value);
+
+ctx.fillStyle=scene.invertMode
+?`rgba(${Math.round(col[0]*.55)},${Math.round(col[1]*.55)},${Math.round(col[2]*.55)},${scene.formAlpha})`
+:`rgba(255,255,255,${scene.formAlpha})`;
+
+if(roleSelect.value==="Piano1"){
+ctx.beginPath();ctx.ellipse(cx,cy,48*sx,48*sy,0,0,Math.PI*2);ctx.fill();
+}else if(roleSelect.value==="Piano2"){
+const r=44;ctx.beginPath();
+for(let i=0;i<5;i++){
+const a=-Math.PI/2+i*2*Math.PI/5;
+const x=cx+Math.cos(a)*r*sx;
+const y=cy+Math.sin(a)*r*sy;
+if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+}
+ctx.closePath();ctx.fill();
+}else if(roleSelect.value==="Perc1"){
+ctx.beginPath();ctx.moveTo(cx,cy-42*sy);
+ctx.lineTo(cx-38*sx,cy+32*sy);
+ctx.lineTo(cx+38*sx,cy+32*sy);
+ctx.closePath();ctx.fill();
+}else{
+ctx.fillRect(cx-38*sx,cy-38*sy,76*sx,76*sy);
+}
+
+ctx.restore();
 
 requestAnimationFrame(drawRolePreview);
 }
 
 drawRolePreview();
-
 </script>
+
 </body>
 </html>
