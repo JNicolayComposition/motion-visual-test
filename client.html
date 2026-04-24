@@ -51,6 +51,10 @@ canvas{display:block;width:100vw;height:76vh;touch-action:none}
 <canvas id="c"></canvas>
 
 <script>
+
+let lastSendTime = 0;
+const SEND_INTERVAL_MS = 60; // ca. 16 Hz
+
 const canvas=document.getElementById("c"),ctx=canvas.getContext("2d"),statusEl=document.getElementById("status");
 const roleSelect=document.getElementById("roleSelect"),modeSelect=document.getElementById("modeSelect"),sceneSelect=document.getElementById("sceneSelect");
 const startBtn=document.getElementById("startBtn"),connectBtn=document.getElementById("connectBtn"),serverInput=document.getElementById("serverInput");
@@ -123,7 +127,12 @@ gamma=e.gamma||0;
 }
 
 function sendState(){
+const now = Date.now();
+if(now - lastSendTime < SEND_INTERVAL_MS) return;
+lastSendTime = now;
+
 if(!connected||!ws||ws.readyState!==1)return;
+
 ws.send(JSON.stringify({
 type:"update",
 role:roleSelect.value,
