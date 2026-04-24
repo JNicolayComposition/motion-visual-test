@@ -6,18 +6,69 @@
 <title>Master Visual</title>
 
 <style>
-body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
+body{
+margin:0;
+background:#000;
+color:#fff;
+font-family:Arial,sans-serif;
+text-align:center;
+overflow:hidden;
+}
+
+#topbar{
+position:fixed;
+top:0;
+left:0;
+right:0;
+z-index:10;
+background:rgba(0,0,0,.72);
+padding-bottom:8px;
+transition:opacity .5s ease, transform .5s ease;
+}
+
+#topbar.hidden{
+opacity:0;
+transform:translateY(-120%);
+pointer-events:none;
+}
+
 h2{margin:12px 0 8px;font-size:22px}
-.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:0 10px;transition:opacity .5s ease}
-.controls.hidden{opacity:0;pointer-events:none}
-input,button,select{font-size:16px;padding:10px 12px;border:none;border-radius:8px}
+
+.controls{
+display:flex;
+justify-content:center;
+align-items:center;
+gap:10px;
+flex-wrap:wrap;
+padding:0 10px;
+}
+
+input,button,select{
+font-size:16px;
+padding:10px 12px;
+border:none;
+border-radius:8px;
+}
+
 input{width:230px}
-#status{margin:6px 0 10px;font-size:14px;opacity:.9;padding:0 12px}
-canvas{display:block;width:100vw;height:82vh}
+
+#status{
+font-size:14px;
+opacity:.9;
+padding:4px 12px;
+}
+
+canvas{
+display:block;
+width:100vw;
+height:100vh;
+}
 </style>
 </head>
 
 <body>
+
+<div id="topbar">
 <h2>Master Visual</h2>
 
 <div class="controls" id="ui">
@@ -38,6 +89,8 @@ canvas{display:block;width:100vw;height:82vh}
 </div>
 
 <div id="status">not connected</div>
+</div>
+
 <canvas id="c"></canvas>
 
 <script>
@@ -48,13 +101,13 @@ serverInput=document.getElementById("serverInput"),
 connectBtn=document.getElementById("connectBtn"),
 resetBtn=document.getElementById("resetBtn"),
 sceneOverride=document.getElementById("sceneOverride"),
-ui=document.getElementById("ui");
+ui=document.getElementById("topbar");
 
 const roles=["Piano1","Piano2","Perc1","Perc2"];
 let ws=null,state={};
 
 for(const r of roles){
-state[r]={sx:0,sy:0,energy:0,mode:"impulse",scene:"A",source:"none",connected:false};
+state[r]={sx:0,sy:0,energy:0,tiltX:0,tiltY:0,mode:"impulse",scene:"A",source:"none",connected:false};
 }
 
 serverInput.value="wss://motion-websocket-server.onrender.com";
@@ -82,12 +135,10 @@ ws.send(JSON.stringify({type:"reset"}));
 }
 };
 
-/* FULLSCREEN */
 document.getElementById("fullscreenBtn").onclick=()=>{
 document.documentElement.requestFullscreen().catch(e=>console.log(e));
 };
 
-/* WAKE LOCK */
 let wakeLock=null;
 async function enableWakeLock(){
 try{wakeLock=await navigator.wakeLock.request("screen");}
@@ -95,10 +146,9 @@ catch(e){console.log(e);}
 }
 document.getElementById("wakeBtn").onclick=enableWakeLock;
 document.addEventListener("visibilitychange",()=>{
-if(wakeLock!==null&&document.visibilityState==="visible"){enableWakeLock();}
+if(wakeLock!==null&&document.visibilityState==="visible")enableWakeLock();
 });
 
-/* AUTO HIDE UI */
 let uiTimeout=null;
 function showUI(){
 ui.classList.remove("hidden");
@@ -109,7 +159,6 @@ document.addEventListener("mousemove",showUI);
 document.addEventListener("click",showUI);
 showUI();
 
-/* SCENE PARAMS */
 function getSceneParams(scene){
 if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
 if(scene==="B")return{baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:10,glowColor:[255,255,255],invertMode:false};
@@ -124,6 +173,8 @@ if(role==="Perc1")return[255,100,100];
 return[100,120,255];
 }
 
+let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
+
 /* PARTICLES */
 let particles=[];
 let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
@@ -131,97 +182,45 @@ let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 function spawnParticles(role,scene,x,y,energy){
 const rgb=getRoleColor(role);
 
-let count=0;
-let speedMin=0.4;
-let speedMax=2.0;
-let sizeMin=1.2;
-let sizeMax=4;
-let life=0.96;
-let color=[255,255,255];
-let alpha=0.6;
-let gravity=0;
-let drag=0.985;
-let shapeType="dot";
+let count=0,speedMin=.4,speedMax=2,sizeMin=1.2,sizeMax=4,life=.96,color=[255,255,255],alpha=.6,gravity=0,drag=.985,shapeType="dot";
 
 if(scene==="A"){
-count=8;
-speedMin=.4;
-speedMax=1.8;
-sizeMin=.8;
-sizeMax=2.8;
-life=.978;
-alpha=.24;
-color=[255,255,255];
-drag=.992;
-shapeType="dust";
+count=8;speedMin=.4;speedMax=1.8;sizeMin=.8;sizeMax=2.8;life=.978;alpha=.24;color=[255,255,255];drag=.992;shapeType="dust";
 }
 else if(scene==="B"){
-count=18;
-speedMin=2.0;
-speedMax=5.5;
-sizeMin=1.2;
-sizeMax=3.6;
-life=.945;
-alpha=.62;
-color=[255,255,255];
-drag=.972;
-shapeType="shard";
+count=18;speedMin=2;speedMax=5.5;sizeMin=1.2;sizeMax=3.6;life=.945;alpha=.62;color=[255,255,255];drag=.972;shapeType="shard";
 }
 else if(scene==="C"){
-count=42;
-speedMin=3.0;
-speedMax=9.0;
-sizeMin=1.5;
-sizeMax=5.0;
-life=.975;
-alpha=.72;
-color=[255,225,150];
-drag=.985;
-shapeType="gold";
+count=42;speedMin=3;speedMax=9;sizeMin=1.5;sizeMax=5;life=.975;alpha=.72;color=[255,225,150];drag=.985;shapeType="gold";
 }
 else{
-count=30;
-speedMin=1.5;
-speedMax=5.5;
-sizeMin=1.4;
-sizeMax=4.5;
-life=.982;
-alpha=.60;
-color=[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)];
-gravity=.008;
-drag=.990;
-shapeType="darkShard";
+count=30;speedMin=1.5;speedMax=5.5;sizeMin=1.4;sizeMax=4.5;life=.982;alpha=.60;color=[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)];gravity=.008;drag=.990;shapeType="darkShard";
 }
 
 count=Math.round(count*clamp(energy/8,.55,1.25));
 
 const minDim=Math.min(canvas.width,canvas.height);
-const startRadius=minDim*0.18;
-const startJitter=minDim*0.12;
+const startRadius=minDim*.18;
+const startJitter=minDim*.12;
 
 for(let i=0;i<count;i++){
 const a=Math.random()*Math.PI*2;
 const sp=speedMin+Math.random()*(speedMax-speedMin);
-
-/* Start already outside the center, so the form is not covered */
 const r=startRadius+Math.random()*startJitter;
-
-/* Irregularity: not all particles radiate evenly */
-const angleJitter=(Math.random()-.5)*0.8;
-const moveAngle=a+angleJitter;
+const moveAngle=a+(Math.random()-.5)*.8;
 
 particles.push({
 x:x+Math.cos(a)*r,
 y:y+Math.sin(a)*r,
-vx:Math.cos(moveAngle)*sp*(0.65+Math.random()*0.75),
-vy:Math.sin(moveAngle)*sp*(0.65+Math.random()*0.75),
+vx:Math.cos(moveAngle)*sp*(.65+Math.random()*.75),
+vy:Math.sin(moveAngle)*sp*(.65+Math.random()*.75),
 life:1,
-decay:life-(Math.random()*0.018),
+decay:life-(Math.random()*.018),
 size:sizeMin+Math.random()*(sizeMax-sizeMin),
 color:color,
-alpha:alpha*(0.55+Math.random()*0.6),
-gravity:gravity*(0.5+Math.random()),
-drag:drag-(Math.random()*0.01),
+alpha:alpha*(.55+Math.random()*.6),
+gravity:gravity*(.5+Math.random()),
+drag:drag-(Math.random()*.01),
 rot:Math.random()*Math.PI*2,
 vr:(Math.random()-.5)*.16,
 scene:scene,
@@ -233,29 +232,21 @@ shapeType:shapeType
 function updateParticles(){
 for(let i=particles.length-1;i>=0;i--){
 const p=particles[i];
-
 p.x+=p.vx;
 p.y+=p.vy;
 p.vy+=p.gravity;
-
 p.vx*=p.drag;
 p.vy*=p.drag;
-
 p.rot+=p.vr;
-
-/* small organic drift */
-p.vx+=Math.sin(p.y*0.01+p.life*5)*0.006;
-p.vy+=Math.cos(p.x*0.01+p.life*4)*0.006;
-
+p.vx+=Math.sin(p.y*.01+p.life*5)*.006;
+p.vy+=Math.cos(p.x*.01+p.life*4)*.006;
 p.life*=p.decay;
-
 if(p.life<.025)particles.splice(i,1);
 }
 }
 
 function drawParticles(){
 ctx.save();
-
 for(const p of particles){
 const a=p.alpha*p.life;
 ctx.globalAlpha=a;
@@ -268,23 +259,16 @@ ctx.rotate(p.rot);
 ctx.fillRect(-p.size/2,-p.size/2,p.size*2.4,p.size*.45);
 ctx.restore();
 }
-else if(p.shapeType==="dust"){
-ctx.beginPath();
-ctx.arc(p.x,p.y,p.size*.7,0,Math.PI*2);
-ctx.fill();
-}
 else{
 ctx.beginPath();
 ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
 ctx.fill();
 }
 }
-
 ctx.restore();
 ctx.globalAlpha=1;
 }
 
-/* DRAW */
 function drawGlow(cx,cy,rgb,alpha,w,h,spread){
 const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*spread);
 g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
@@ -294,15 +278,17 @@ ctx.fillStyle=g;
 ctx.fillRect(0,0,w,h);
 }
 
-function shape(role,cx,cy,sx,sy,fill,glow,blur){
+function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0){
 ctx.save();
+ctx.translate(cx,cy);
+ctx.rotate(rotation);
 ctx.shadowColor=glow;
 ctx.shadowBlur=blur;
 ctx.fillStyle=fill;
 
 if(role==="Piano1"){
 ctx.beginPath();
-ctx.ellipse(cx,cy,48*sx,48*sy,0,0,Math.PI*2);
+ctx.ellipse(0,0,48*sx,48*sy,0,0,Math.PI*2);
 ctx.fill();
 }
 else if(role==="Piano2"){
@@ -310,8 +296,8 @@ const r=44;
 ctx.beginPath();
 for(let i=0;i<5;i++){
 const a=-Math.PI/2+i*2*Math.PI/5;
-const x=cx+Math.cos(a)*r*sx;
-const y=cy+Math.sin(a)*r*sy;
+const x=Math.cos(a)*r*sx;
+const y=Math.sin(a)*r*sy;
 if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
 }
 ctx.closePath();
@@ -319,22 +305,21 @@ ctx.fill();
 }
 else if(role==="Perc1"){
 ctx.beginPath();
-ctx.moveTo(cx,cy-42*sy);
-ctx.lineTo(cx-38*sx,cy+32*sy);
-ctx.lineTo(cx+38*sx,cy+32*sy);
+ctx.moveTo(0,-42*sy);
+ctx.lineTo(-38*sx,32*sy);
+ctx.lineTo(38*sx,32*sy);
 ctx.closePath();
 ctx.fill();
 }
 else{
-ctx.fillRect(cx-38*sx,cy-38*sy,76*sx,76*sy);
+ctx.fillRect(-38*sx,-38*sy,76*sx,76*sy);
 }
 ctx.restore();
 }
 
-/* RENDER */
 function render(){
 canvas.width=window.innerWidth;
-canvas.height=window.innerHeight*.82;
+canvas.height=window.innerHeight;
 
 const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
 
@@ -387,23 +372,38 @@ const fill=sc.invertMode
 const glow=`rgba(${sc.glowColor[0]},${sc.glowColor[1]},${sc.glowColor[2]},.95)`;
 const blur=sc.formGlow+(st.sx||0)*8+(st.sy||0)*8+e*(scn==="B"?24:12);
 
-const now=Date.now();
+let drawX=cx;
+let drawY=cy;
+let rotation=0;
 
-/* Higher thresholds + longer cooldowns:
-   particles only appear as clear events, not continuously. */
+const tiltX=clamp((st.tiltX||0)/45,-1,1);
+const tiltY=clamp((st.tiltY||0)/45,-1,1);
+
+if((st.mode||"impulse")==="tilt"){
+if(scn==="A"){
+const tiltAmount=Math.sqrt(tiltX*tiltX+tiltY*tiltY);
+const dir=tiltX>=0?1:-1;
+rotations[r]+=dir*(.005+tiltAmount*.08);
+rotation=rotations[r];
+}
+
+if(scn==="C"){
+const edgeReach=.48;
+drawX=cx+tiltX*w*edgeReach;
+drawY=cy+tiltY*h*edgeReach;
+}
+}
+
+const now=Date.now();
 const threshold=scn==="A"?10.5:scn==="B"?7.5:scn==="C"?7.0:7.2;
 const cooldown=scn==="A"?1800:scn==="B"?900:scn==="C"?1100:1300;
 
-/* Irregular trigger:
-   prevents mechanically regular pulsation. */
-const randomGate=Math.random();
-
-if((st.energy||0)>threshold && now-lastBurst[r]>cooldown && randomGate>.18){
-spawnParticles(r,scn,cx,cy,st.energy||0);
+if((st.energy||0)>threshold && now-lastBurst[r]>cooldown && Math.random()>.18){
+spawnParticles(r,scn,drawX,drawY,st.energy||0);
 lastBurst[r]=now;
 }
 
-shape(r,cx,cy,sx,sy,fill,glow,blur);
+shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation);
 }
 
 statusEl.textContent=roles.map(r=>`${r}:${state[r]?.connected?"on":"off"} ${state[r]?.source||"none"}`).join(" | ");
