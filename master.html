@@ -6,76 +6,25 @@
 <title>Master Visual</title>
 
 <style>
-body{
-margin:0;
-background:#000;
-color:#fff;
-font-family:Arial,sans-serif;
-text-align:center;
-overflow:hidden;
-}
-
-#topbar{
-position:fixed;
-top:0;
-left:0;
-right:0;
-z-index:10;
-background:rgba(0,0,0,.72);
-padding-bottom:8px;
-transition:opacity .5s ease, transform .5s ease;
-}
-
-#topbar.hidden{
-opacity:0;
-transform:translateY(-120%);
-pointer-events:none;
-}
-
+body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
+#topbar{position:fixed;top:0;left:0;right:0;z-index:10;background:rgba(0,0,0,.72);padding-bottom:8px;transition:opacity .5s ease,transform .5s ease}
+#topbar.hidden{opacity:0;transform:translateY(-120%);pointer-events:none}
 h2{margin:12px 0 8px;font-size:22px}
-
-.controls{
-display:flex;
-justify-content:center;
-align-items:center;
-gap:10px;
-flex-wrap:wrap;
-padding:0 10px;
-}
-
-input,button,select{
-font-size:16px;
-padding:10px 12px;
-border:none;
-border-radius:8px;
-}
-
+.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;padding:0 10px}
+input,button,select{font-size:16px;padding:10px 12px;border:none;border-radius:8px}
 input{width:230px}
-
-#status{
-font-size:14px;
-opacity:.9;
-padding:4px 12px;
-}
-
-canvas{
-display:block;
-width:100vw;
-height:100vh;
-}
+#status{font-size:14px;opacity:.9;padding:4px 12px}
+canvas{display:block;width:100vw;height:100vh}
 </style>
 </head>
 
 <body>
-
 <div id="topbar">
 <h2>Master Visual</h2>
-
 <div class="controls" id="ui">
 <input id="serverInput"/>
 <button id="connectBtn">Connect</button>
 <button id="resetBtn">Reset</button>
-
 <select id="sceneOverride">
 <option value="fromClients">Scenes from clients</option>
 <option value="A">Force Scene A</option>
@@ -83,11 +32,9 @@ height:100vh;
 <option value="C">Force Scene C</option>
 <option value="D">Force Scene D</option>
 </select>
-
 <button id="fullscreenBtn">Fullscreen</button>
 <button id="wakeBtn">Keep Awake</button>
 </div>
-
 <div id="status">not connected</div>
 </div>
 
@@ -110,9 +57,15 @@ for(const r of roles){
 state[r]={sx:0,sy:0,energy:0,tiltX:0,tiltY:0,mode:"impulse",scene:"A",source:"none",connected:false};
 }
 
+let visual={};
+for(const r of roles){
+visual[r]={sx:0,sy:0,energy:0,x:0,y:0,vx:0,vy:0,ready:true};
+}
+
 serverInput.value="wss://motion-websocket-server.onrender.com";
 
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function lerp(a,b,t){return a+(b-a)*t}
 
 function connectWs(){
 ws=new WebSocket(serverInput.value.trim());
@@ -128,12 +81,7 @@ if(msg.type==="state"&&msg.roles){state=msg.roles;}
 }
 
 connectBtn.onclick=connectWs;
-
-resetBtn.onclick=()=>{
-if(ws&&ws.readyState===1){
-ws.send(JSON.stringify({type:"reset"}));
-}
-};
+resetBtn.onclick=()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:"reset"}))};
 
 document.getElementById("fullscreenBtn").onclick=()=>{
 document.documentElement.requestFullscreen().catch(e=>console.log(e));
@@ -141,13 +89,10 @@ document.documentElement.requestFullscreen().catch(e=>console.log(e));
 
 let wakeLock=null;
 async function enableWakeLock(){
-try{wakeLock=await navigator.wakeLock.request("screen");}
-catch(e){console.log(e);}
+try{wakeLock=await navigator.wakeLock.request("screen");}catch(e){console.log(e)}
 }
 document.getElementById("wakeBtn").onclick=enableWakeLock;
-document.addEventListener("visibilitychange",()=>{
-if(wakeLock!==null&&document.visibilityState==="visible")enableWakeLock();
-});
+document.addEventListener("visibilitychange",()=>{if(wakeLock!==null&&document.visibilityState==="visible")enableWakeLock()});
 
 let uiTimeout=null;
 function showUI(){
@@ -161,7 +106,7 @@ showUI();
 
 function getSceneParams(scene){
 if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
-if(scene==="B")return{baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:10,glowColor:[255,255,255],invertMode:false};
+if(scene==="B")return{baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:16,glowColor:[255,255,255],invertMode:false};
 if(scene==="C")return{baseSize:.05,scaleGain:.58,maxScale:3.35,brightnessBase:.52,brightnessGain:.58,globalAmbient:.42,glowSpread:1.42,formAlpha:.96,formGlow:34,glowColor:[255,225,150],invertMode:false};
 return{baseSize:.03,scaleGain:.46,maxScale:3,brightnessBase:.10,brightnessGain:.72,globalAmbient:.14,glowSpread:1.40,formAlpha:.72,formGlow:42,glowColor:[255,255,255],invertMode:true};
 }
@@ -173,57 +118,58 @@ if(role==="Perc1")return[255,100,100];
 return[100,120,255];
 }
 
+function getRoleDirection(role){
+if(role==="Piano1")return[-1,-1];
+if(role==="Piano2")return[1,-1];
+if(role==="Perc1")return[-1,1];
+return[1,1];
+}
+
 let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 
-/* PARTICLES */
 let particles=[];
 let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 
 function spawnParticles(role,scene,x,y,energy){
+if(scene==="B")return;
+
 const rgb=getRoleColor(role);
-
-let count=0,speedMin=.4,speedMax=2,sizeMin=1.2,sizeMax=4,life=.96,color=[255,255,255],alpha=.6,gravity=0,drag=.985,shapeType="dot";
-
-if(scene==="A"){
-count=8;speedMin=.4;speedMax=1.8;sizeMin=.8;sizeMax=2.8;life=.978;alpha=.24;color=[255,255,255];drag=.992;shapeType="dust";
-}
-else if(scene==="B"){
-count=18;speedMin=2;speedMax=5.5;sizeMin=1.2;sizeMax=3.6;life=.945;alpha=.62;color=[255,255,255];drag=.972;shapeType="shard";
-}
-else if(scene==="C"){
-count=42;speedMin=3;speedMax=9;sizeMin=1.5;sizeMax=5;life=.975;alpha=.72;color=[255,225,150];drag=.985;shapeType="gold";
-}
-else{
-count=30;speedMin=1.5;speedMax=5.5;sizeMin=1.4;sizeMax=4.5;life=.982;alpha=.60;color=[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)];gravity=.008;drag=.990;shapeType="darkShard";
-}
-
-count=Math.round(count*clamp(energy/8,.55,1.25));
+let count=scene==="C"?42:28;
+let color=scene==="C"?[255,225,150]:[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)];
+let speedMin=scene==="C"?3.2:1.6;
+let speedMax=scene==="C"?9.0:5.2;
+let life=scene==="C"?.976:.982;
+let alpha=scene==="C"?.70:.60;
+let drag=scene==="C"?.985:.99;
+let gravity=scene==="D"?.008:0;
+let shapeType=scene==="D"?"darkShard":"gold";
 
 const minDim=Math.min(canvas.width,canvas.height);
-const startRadius=minDim*.18;
-const startJitter=minDim*.12;
+const startRadius=minDim*.22;
+const startJitter=minDim*.16;
+
+count=Math.round(count*clamp(energy/8,.55,1.15));
 
 for(let i=0;i<count;i++){
 const a=Math.random()*Math.PI*2;
 const sp=speedMin+Math.random()*(speedMax-speedMin);
 const r=startRadius+Math.random()*startJitter;
-const moveAngle=a+(Math.random()-.5)*.8;
+const moveAngle=a+(Math.random()-.5)*.9;
 
 particles.push({
 x:x+Math.cos(a)*r,
 y:y+Math.sin(a)*r,
-vx:Math.cos(moveAngle)*sp*(.65+Math.random()*.75),
-vy:Math.sin(moveAngle)*sp*(.65+Math.random()*.75),
+vx:Math.cos(moveAngle)*sp*(.55+Math.random()*.8),
+vy:Math.sin(moveAngle)*sp*(.55+Math.random()*.8),
 life:1,
-decay:life-(Math.random()*.018),
-size:sizeMin+Math.random()*(sizeMax-sizeMin),
+decay:life-(Math.random()*.02),
+size:1.4+Math.random()*4.5,
 color:color,
-alpha:alpha*(.55+Math.random()*.6),
+alpha:alpha*(.45+Math.random()*.65),
 gravity:gravity*(.5+Math.random()),
-drag:drag-(Math.random()*.01),
+drag:drag-(Math.random()*.012),
 rot:Math.random()*Math.PI*2,
 vr:(Math.random()-.5)*.16,
-scene:scene,
 shapeType:shapeType
 });
 }
@@ -248,18 +194,16 @@ if(p.life<.025)particles.splice(i,1);
 function drawParticles(){
 ctx.save();
 for(const p of particles){
-const a=p.alpha*p.life;
-ctx.globalAlpha=a;
+ctx.globalAlpha=p.alpha*p.life;
 ctx.fillStyle=`rgb(${p.color[0]},${p.color[1]},${p.color[2]})`;
 
-if(p.shapeType==="shard"||p.shapeType==="darkShard"){
+if(p.shapeType==="darkShard"){
 ctx.save();
 ctx.translate(p.x,p.y);
 ctx.rotate(p.rot);
 ctx.fillRect(-p.size/2,-p.size/2,p.size*2.4,p.size*.45);
 ctx.restore();
-}
-else{
+}else{
 ctx.beginPath();
 ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
 ctx.fill();
@@ -278,14 +222,7 @@ ctx.fillStyle=g;
 ctx.fillRect(0,0,w,h);
 }
 
-function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0){
-ctx.save();
-ctx.translate(cx,cy);
-ctx.rotate(rotation);
-ctx.shadowColor=glow;
-ctx.shadowBlur=blur;
-ctx.fillStyle=fill;
-
+function drawPath(role,sx,sy){
 if(role==="Piano1"){
 ctx.beginPath();
 ctx.ellipse(0,0,48*sx,48*sy,0,0,Math.PI*2);
@@ -314,6 +251,34 @@ ctx.fill();
 else{
 ctx.fillRect(-38*sx,-38*sy,76*sx,76*sy);
 }
+}
+
+function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0,is3D=false){
+ctx.save();
+ctx.translate(cx,cy);
+ctx.rotate(rotation);
+
+if(is3D){
+for(let i=14;i>0;i--){
+ctx.save();
+ctx.translate(i*2.2,-i*1.4);
+ctx.fillStyle=`rgba(120,140,180,${0.018+i*.006})`;
+drawPath(role,sx,sy);
+ctx.restore();
+}
+}
+
+ctx.shadowColor=glow;
+ctx.shadowBlur=blur;
+ctx.fillStyle=fill;
+drawPath(role,sx,sy);
+
+if(is3D){
+ctx.lineWidth=1.2;
+ctx.strokeStyle="rgba(255,255,255,.35)";
+ctx.stroke();
+}
+
 ctx.restore();
 }
 
@@ -322,12 +287,10 @@ canvas.width=window.innerWidth;
 canvas.height=window.innerHeight;
 
 const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
-
 ctx.fillStyle="rgb(5,5,5)";
 ctx.fillRect(0,0,w,h);
 
 const forced=sceneOverride.value;
-
 let amb=.1,spread=1.32;
 
 for(const r of roles){
@@ -336,7 +299,7 @@ amb=Math.max(amb,sc.globalAmbient*.65);
 spread=Math.max(spread,sc.glowSpread);
 }
 
-const bright={};
+let bright={};
 
 for(const r of roles){
 const st=state[r]||{};
@@ -358,10 +321,19 @@ for(const r of roles){
 const st=state[r]||{};
 const scn=forced==="fromClients"?(st.scene||"A"):forced;
 const sc=getSceneParams(scn);
-const e=clamp((st.energy||0)/10,0,1);
 
-const sx=clamp(sc.baseSize+(st.sx||0)*sc.scaleGain,sc.baseSize,sc.maxScale);
-const sy=clamp(sc.baseSize+(st.sy||0)*sc.scaleGain,sc.baseSize,sc.maxScale);
+const targetSx=st.sx||0;
+const targetSy=st.sy||0;
+const targetEnergy=st.energy||0;
+
+visual[r].sx=lerp(visual[r].sx,targetSx,targetSx>visual[r].sx?.26:.035);
+visual[r].sy=lerp(visual[r].sy,targetSy,targetSy>visual[r].sy?.26:.035);
+visual[r].energy=lerp(visual[r].energy,targetEnergy,targetEnergy>visual[r].energy?.30:.045);
+
+const e=clamp(visual[r].energy/10,0,1);
+
+const sx=clamp(sc.baseSize+visual[r].sx*sc.scaleGain,sc.baseSize,sc.maxScale);
+const sy=clamp(sc.baseSize+visual[r].sy*sc.scaleGain,sc.baseSize,sc.maxScale);
 
 const rgb=getRoleColor(r);
 
@@ -370,7 +342,7 @@ const fill=sc.invertMode
 :`rgba(255,255,255,${sc.formAlpha})`;
 
 const glow=`rgba(${sc.glowColor[0]},${sc.glowColor[1]},${sc.glowColor[2]},.95)`;
-const blur=sc.formGlow+(st.sx||0)*8+(st.sy||0)*8+e*(scn==="B"?24:12);
+const blur=sc.formGlow+visual[r].sx*8+visual[r].sy*8+e*(scn==="B"?28:12);
 
 let drawX=cx;
 let drawY=cy;
@@ -383,31 +355,59 @@ if((st.mode||"impulse")==="tilt"){
 if(scn==="A"){
 const tiltAmount=Math.sqrt(tiltX*tiltX+tiltY*tiltY);
 const dir=tiltX>=0?1:-1;
-rotations[r]+=dir*(.005+tiltAmount*.08);
+rotations[r]+=dir*(.004+tiltAmount*.07);
 rotation=rotations[r];
 }
 
 if(scn==="C"){
-const edgeReach=.48;
-drawX=cx+tiltX*w*edgeReach;
-drawY=cy+tiltY*h*edgeReach;
+const dir=getRoleDirection(r);
+const projection=clamp((tiltX*dir[0]+tiltY*dir[1])/2,0,1);
+const bounceTarget=projection*0.34;
+
+const targetX=cx+dir[0]*w*bounceTarget;
+const targetY=cy+dir[1]*h*bounceTarget;
+
+visual[r].vx+=(targetX-visual[r].x)*.045;
+visual[r].vy+=(targetY-visual[r].y)*.045;
+visual[r].vx*=.78;
+visual[r].vy*=.78;
+
+visual[r].x+=visual[r].vx;
+visual[r].y+=visual[r].vy;
+
+if(!visual[r].x&&!visual[r].y){
+visual[r].x=cx;
+visual[r].y=cy;
 }
+
+drawX=visual[r].x;
+drawY=visual[r].y;
+}else{
+visual[r].x=lerp(visual[r].x||cx,cx,.06);
+visual[r].y=lerp(visual[r].y||cy,cy,.06);
 }
+}else{
+visual[r].x=lerp(visual[r].x||cx,cx,.06);
+visual[r].y=lerp(visual[r].y||cy,cy,.06);
+}
+
+const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
+
+if(scaleNorm<.58){visual[r].ready=true;}
 
 const now=Date.now();
-const threshold=scn==="A"?10.5:scn==="B"?7.5:scn==="C"?7.0:7.2;
-const cooldown=scn==="A"?1800:scn==="B"?900:scn==="C"?1100:1300;
+const cooldown=scn==="C"?1400:scn==="D"?1600:99999;
 
-if((st.energy||0)>threshold && now-lastBurst[r]>cooldown && Math.random()>.18){
-spawnParticles(r,scn,drawX,drawY,st.energy||0);
+if((scn==="C"||scn==="D")&&scaleNorm>.92&&visual[r].ready&&now-lastBurst[r]>cooldown){
+spawnParticles(r,scn,drawX,drawY,visual[r].energy||0);
 lastBurst[r]=now;
+visual[r].ready=false;
 }
 
-shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation);
+shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B");
 }
 
 statusEl.textContent=roles.map(r=>`${r}:${state[r]?.connected?"on":"off"} ${state[r]?.source||"none"}`).join(" | ");
-
 requestAnimationFrame(render);
 }
 
