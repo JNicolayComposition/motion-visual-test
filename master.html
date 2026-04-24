@@ -8,54 +8,19 @@
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
 h2{margin:12px 0 8px;font-size:22px}
-
-/* UI */
-.controls{
-display:flex;
-justify-content:center;
-align-items:center;
-gap:10px;
-flex-wrap:wrap;
-margin-bottom:10px;
-padding:0 10px;
-transition:opacity 0.5s ease;
-}
-
-.controls.hidden{
-opacity:0;
-pointer-events:none;
-}
-
-input,button,select{
-font-size:16px;
-padding:10px 12px;
-border:none;
-border-radius:8px
-}
-
+.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:0 10px;transition:opacity .5s ease}
+.controls.hidden{opacity:0;pointer-events:none}
+input,button,select{font-size:16px;padding:10px 12px;border:none;border-radius:8px}
 input{width:230px}
-
-#status{
-margin:6px 0 10px;
-font-size:14px;
-opacity:.9;
-padding:0 12px
-}
-
-canvas{
-display:block;
-width:100vw;
-height:82vh
-}
+#status{margin:6px 0 10px;font-size:14px;opacity:.9;padding:0 12px}
+canvas{display:block;width:100vw;height:82vh}
 </style>
 </head>
 
 <body>
-
 <h2>Master Visual</h2>
 
 <div class="controls" id="ui">
-
 <input id="serverInput"/>
 <button id="connectBtn">Connect</button>
 <button id="resetBtn">Reset</button>
@@ -68,17 +33,14 @@ height:82vh
 <option value="D">Force Scene D</option>
 </select>
 
-<!-- NEU -->
 <button id="fullscreenBtn">Fullscreen</button>
 <button id="wakeBtn">Keep Awake</button>
-
 </div>
 
 <div id="status">not connected</div>
 <canvas id="c"></canvas>
 
 <script>
-
 const canvas=document.getElementById("c"),
 ctx=canvas.getContext("2d"),
 statusEl=document.getElementById("status"),
@@ -89,36 +51,27 @@ sceneOverride=document.getElementById("sceneOverride"),
 ui=document.getElementById("ui");
 
 const roles=["Piano1","Piano2","Perc1","Perc2"];
-
 let ws=null,state={};
 
 for(const r of roles){
-state[r]={sx:0,sy:0,energy:0,mode:"impulse",scene:"A",source:"none",connected:false}
+state[r]={sx:0,sy:0,energy:0,mode:"impulse",scene:"A",source:"none",connected:false};
 }
 
-/* ======================
-   DEFAULT SERVER
-====================== */
 serverInput.value="wss://motion-websocket-server.onrender.com";
 
-/* ======================
-   CONNECT
-====================== */
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+
 function connectWs(){
 ws=new WebSocket(serverInput.value.trim());
-
 ws.onopen=()=>statusEl.textContent="connected";
 ws.onclose=()=>statusEl.textContent="disconnected";
 ws.onerror=()=>statusEl.textContent="websocket error";
-
 ws.onmessage=(ev)=>{
 try{
 const msg=JSON.parse(ev.data);
-if(msg.type==="state"&&msg.roles){
-state=msg.roles;
-}
+if(msg.type==="state"&&msg.roles){state=msg.roles;}
 }catch(e){}
-}
+};
 }
 
 connectBtn.onclick=connectWs;
@@ -129,63 +82,34 @@ ws.send(JSON.stringify({type:"reset"}));
 }
 };
 
-/* ======================
-   FULLSCREEN
-====================== */
+/* FULLSCREEN */
 document.getElementById("fullscreenBtn").onclick=()=>{
 document.documentElement.requestFullscreen().catch(e=>console.log(e));
 };
 
-/* ======================
-   WAKE LOCK
-====================== */
+/* WAKE LOCK */
 let wakeLock=null;
-
 async function enableWakeLock(){
-try{
-wakeLock=await navigator.wakeLock.request("screen");
-console.log("Wake lock active");
-}catch(e){
-console.log(e);
+try{wakeLock=await navigator.wakeLock.request("screen");}
+catch(e){console.log(e);}
 }
-}
-
 document.getElementById("wakeBtn").onclick=enableWakeLock;
-
 document.addEventListener("visibilitychange",()=>{
-if(wakeLock!==null && document.visibilityState==="visible"){
-enableWakeLock();
-}
+if(wakeLock!==null&&document.visibilityState==="visible"){enableWakeLock();}
 });
 
-/* ======================
-   AUTO HIDE UI
-====================== */
+/* AUTO HIDE UI */
 let uiTimeout=null;
-
 function showUI(){
 ui.classList.remove("hidden");
-
-if(uiTimeout) clearTimeout(uiTimeout);
-
-uiTimeout=setTimeout(()=>{
-ui.classList.add("hidden");
-},3000);
+if(uiTimeout)clearTimeout(uiTimeout);
+uiTimeout=setTimeout(()=>ui.classList.add("hidden"),3000);
 }
-
 document.addEventListener("mousemove",showUI);
 document.addEventListener("click",showUI);
-
 showUI();
 
-/* ======================
-   HELPERS
-====================== */
-function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
-
-/* ======================
-   SCENE PARAMS
-====================== */
+/* SCENE PARAMS */
 function getSceneParams(scene){
 if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
 if(scene==="B")return{baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:10,glowColor:[255,255,255],invertMode:false};
@@ -200,9 +124,98 @@ if(role==="Perc1")return[255,100,100];
 return[100,120,255];
 }
 
-/* ======================
-   DRAW
-====================== */
+/* PARTICLES */
+let particles=[];
+let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
+
+function spawnParticles(role,scene,x,y,energy){
+const rgb=getRoleColor(role);
+let count=0;
+let speedMin=0.3;
+let speedMax=2.0;
+let sizeMin=1.5;
+let sizeMax=5;
+let life=0.96;
+let color=[255,255,255];
+let alpha=0.7;
+let gravity=0;
+let drag=0.985;
+
+if(scene==="A"){
+count=10; speedMin=.2; speedMax=1.0; sizeMin=1; sizeMax=3; life=.975; alpha=.28; color=[255,255,255]; drag=.99;
+}
+else if(scene==="B"){
+count=22; speedMin=1.2; speedMax=3.0; sizeMin=1.5; sizeMax=4; life=.94; alpha=.75; color=[255,255,255]; drag=.965;
+}
+else if(scene==="C"){
+count=55; speedMin=1.8; speedMax=5.5; sizeMin=2; sizeMax=7; life=.965; alpha=.9; color=[255,225,150]; drag=.975;
+}
+else{
+count=38; speedMin=.6; speedMax=2.4; sizeMin=2; sizeMax=6; life=.975; alpha=.75; color=[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)]; gravity=.015; drag=.985;
+}
+
+count=Math.round(count*clamp(energy/8,.5,1.4));
+
+for(let i=0;i<count;i++){
+const a=Math.random()*Math.PI*2;
+const sp=speedMin+Math.random()*(speedMax-speedMin);
+particles.push({
+x:x,
+y:y,
+vx:Math.cos(a)*sp,
+vy:Math.sin(a)*sp,
+life:1,
+decay:life,
+size:sizeMin+Math.random()*(sizeMax-sizeMin),
+color:color,
+alpha:alpha,
+gravity:gravity,
+drag:drag,
+rot:Math.random()*Math.PI*2,
+vr:(Math.random()-.5)*.12,
+scene:scene
+});
+}
+}
+
+function updateParticles(){
+for(let i=particles.length-1;i>=0;i--){
+const p=particles[i];
+p.x+=p.vx;
+p.y+=p.vy;
+p.vy+=p.gravity;
+p.vx*=p.drag;
+p.vy*=p.drag;
+p.rot+=p.vr;
+p.life*=p.decay;
+if(p.life<.03)particles.splice(i,1);
+}
+}
+
+function drawParticles(){
+ctx.save();
+for(const p of particles){
+const a=p.alpha*p.life;
+ctx.globalAlpha=a;
+ctx.fillStyle=`rgb(${p.color[0]},${p.color[1]},${p.color[2]})`;
+
+if(p.scene==="B"||p.scene==="D"){
+ctx.save();
+ctx.translate(p.x,p.y);
+ctx.rotate(p.rot);
+ctx.fillRect(-p.size/2,-p.size/2,p.size*1.8,p.size*.5);
+ctx.restore();
+}else{
+ctx.beginPath();
+ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+ctx.fill();
+}
+}
+ctx.restore();
+ctx.globalAlpha=1;
+}
+
+/* DRAW */
 function drawGlow(cx,cy,rgb,alpha,w,h,spread){
 const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*spread);
 g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
@@ -230,8 +243,7 @@ for(let i=0;i<5;i++){
 const a=-Math.PI/2+i*2*Math.PI/5;
 const x=cx+Math.cos(a)*r*sx;
 const y=cy+Math.sin(a)*r*sy;
-if(i===0)ctx.moveTo(x,y);
-else ctx.lineTo(x,y);
+if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
 }
 ctx.closePath();
 ctx.fill();
@@ -247,15 +259,11 @@ ctx.fill();
 else{
 ctx.fillRect(cx-38*sx,cy-38*sy,76*sx,76*sy);
 }
-
 ctx.restore();
 }
 
-/* ======================
-   RENDER
-====================== */
+/* RENDER */
 function render(){
-
 canvas.width=window.innerWidth;
 canvas.height=window.innerHeight*.82;
 
@@ -278,9 +286,9 @@ const bright={};
 
 for(const r of roles){
 const st=state[r]||{};
-const sc=getSceneParams(forced==="fromClients"?(st.scene||"A"):forced);
+const scn=forced==="fromClients"?(st.scene||"A"):forced;
+const sc=getSceneParams(scn);
 const e=clamp((st.energy||0)/10,0,1);
-
 bright[r]=clamp(sc.brightnessBase+e*sc.brightnessGain,sc.brightnessBase,1);
 }
 
@@ -289,12 +297,13 @@ drawGlow(w*.75,h*.25,[120,255,120],Math.max(amb,bright.Piano2||0),w,h,spread);
 drawGlow(w*.25,h*.75,[255,100,100],Math.max(amb,bright.Perc1||0),w,h,spread);
 drawGlow(w*.75,h*.75,[100,120,255],Math.max(amb,bright.Perc2||0),w,h,spread);
 
-for(const r of roles){
+updateParticles();
+drawParticles();
 
+for(const r of roles){
 const st=state[r]||{};
 const scn=forced==="fromClients"?(st.scene||"A"):forced;
 const sc=getSceneParams(scn);
-
 const e=clamp((st.energy||0)/10,0,1);
 
 const sx=clamp(sc.baseSize+(st.sx||0)*sc.scaleGain,sc.baseSize,sc.maxScale);
@@ -307,8 +316,16 @@ const fill=sc.invertMode
 :`rgba(255,255,255,${sc.formAlpha})`;
 
 const glow=`rgba(${sc.glowColor[0]},${sc.glowColor[1]},${sc.glowColor[2]},.95)`;
-
 const blur=sc.formGlow+(st.sx||0)*8+(st.sy||0)*8+e*(scn==="B"?24:12);
+
+const now=Date.now();
+const threshold=scn==="A"?9.2:scn==="B"?6.2:scn==="C"?5.2:5.8;
+const cooldown=scn==="A"?1400:scn==="B"?500:scn==="C"?700:900;
+
+if((st.energy||0)>threshold && now-lastBurst[r]>cooldown){
+spawnParticles(r,scn,cx,cy,st.energy||0);
+lastBurst[r]=now;
+}
 
 shape(r,cx,cy,sx,sy,fill,glow,blur);
 }
@@ -319,7 +336,6 @@ requestAnimationFrame(render);
 }
 
 render();
-
 </script>
 </body>
 </html>
