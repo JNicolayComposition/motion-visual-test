@@ -1,604 +1,565 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Master Visual</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Motion Visual</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      overflow: hidden;
+    }
 
-<style>
-body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
-#topbar{position:fixed;top:0;left:0;right:0;z-index:10;background:rgba(0,0,0,.72);padding-bottom:8px;transition:opacity .5s ease,transform .5s ease}
-#topbar.hidden{opacity:0;transform:translateY(-120%);pointer-events:none}
-h2{margin:12px 0 8px;font-size:22px}
-.controls{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;padding:0 10px}
-input,button,select{font-size:16px;padding:10px 12px;border:none;border-radius:8px}
-input{width:230px}
-#status{font-size:14px;opacity:.9;padding:4px 12px}
-canvas{display:block;width:100vw;height:100vh}
-</style>
+    h2 {
+      margin: 12px 0 8px;
+      font-size: 22px;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      padding: 0 10px;
+    }
+
+    select, button {
+      font-size: 17px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    #status {
+      margin: 6px 0 10px;
+      font-size: 14px;
+      opacity: 0.9;
+      padding: 0 12px;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 80vh;
+      touch-action: none;
+    }
+  </style>
 </head>
-
 <body>
-<div id="topbar">
-<h2>Master Visual</h2>
-<div class="controls" id="ui">
-<input id="serverInput"/>
-<button id="connectBtn">Connect</button>
-<button id="resetBtn">Reset</button>
-<select id="sceneOverride">
-<option value="fromClients">Scenes from clients</option>
-<option value="A">Force Scene A</option>
-<option value="B">Force Scene B</option>
-<option value="C">Force Scene C</option>
-<option value="D">Force Scene D</option>
-</select>
-<button id="fullscreenBtn">Fullscreen</button>
-<button id="wakeBtn">Keep Awake</button>
-</div>
-<div id="status">not connected</div>
-</div>
-
-<canvas id="c"></canvas>
-
-<script>
-const canvas=document.getElementById("c"),
-ctx=canvas.getContext("2d"),
-statusEl=document.getElementById("status"),
-serverInput=document.getElementById("serverInput"),
-connectBtn=document.getElementById("connectBtn"),
-resetBtn=document.getElementById("resetBtn"),
-sceneOverride=document.getElementById("sceneOverride"),
-ui=document.getElementById("topbar");
-
-const roles=["Piano1","Piano2","Perc1","Perc2"];
-let ws=null,state={};
-
-const SMOOTH_PROFILE={
-  interpMs:62,          // stable, but still fills gaps between websocket updates
-  staleAfterMs:95,      // prevents the visual from falling asleep too early
-  gestureDecayMs:190,   // smoother decay; avoids jitter and stop/start locking
-  energyDecayMs:105,    // short enough for impulses, long enough to reconnect cleanly
-  maxParticles:520
-};
-
-let dpr=1;
-function resizeCanvas(){
-  dpr=Math.min(window.devicePixelRatio||1,1.65);
-  const w=Math.floor(window.innerWidth*dpr);
-  const h=Math.floor(window.innerHeight*dpr);
-  if(canvas.width!==w||canvas.height!==h){
-    canvas.width=w;
-    canvas.height=h;
-    canvas.style.width=window.innerWidth+"px";
-    canvas.style.height=window.innerHeight+"px";
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-}
-window.addEventListener("resize",resizeCanvas,{passive:true});
-resizeCanvas();
-
-for(const r of roles){
-state[r]={sx:0,sy:0,energy:0,tiltX:0,tiltY:0,mode:"impulse",scene:"A",source:"none",connected:false};
-}
-
-let inputBuffer={};
-for(const r of roles){
-inputBuffer[r]={
-  prev:{...state[r]},
-  target:{...state[r]},
-  start:performance.now(),
-  lastUpdate:performance.now()
-};
-}
-
-function mix(a,b,t){return a+(b-a)*t}
-function smoothstep(t){return t*t*(3-2*t)}
-function numberOr(v,fallback=0){return Number.isFinite(+v)?+v:fallback}
-
-function sampleRole(role,now=performance.now()){
-  const b=inputBuffer[role];
-  const rawT=clamp((now-b.start)/SMOOTH_PROFILE.interpMs,0,1);
-  const t=smoothstep(rawT);
-  const prev=b.prev,target=b.target;
-  const age=now-b.lastUpdate;
-  const hold=Math.max(0,age-SMOOTH_PROFILE.staleAfterMs);
-  const gestureFresh=Math.exp(-hold/SMOOTH_PROFILE.gestureDecayMs);
-  const energyFresh=Math.exp(-hold/SMOOTH_PROFILE.energyDecayMs);
-
-  return {
-    sx:mix(numberOr(prev.sx),numberOr(target.sx),t)*gestureFresh,
-    sy:mix(numberOr(prev.sy),numberOr(target.sy),t)*gestureFresh,
-    energy:mix(numberOr(prev.energy),numberOr(target.energy),t)*energyFresh,
-    tiltX:mix(numberOr(prev.tiltX),numberOr(target.tiltX),t),
-    tiltY:mix(numberOr(prev.tiltY),numberOr(target.tiltY),t),
-    confidence:clamp(1-(hold/650),0,1),
-    fresh:age<260,
-    mode:target.mode||"impulse",
-    scene:target.scene||"A",
-    source:target.source||"none",
-    connected:!!target.connected
-  };
-}
-
-function updateRoleInput(role,next){
-  const now=performance.now();
-  inputBuffer[role].prev=sampleRole(role,now);
-  inputBuffer[role].target={...state[role],...(next||{})};
-  inputBuffer[role].start=now;
-  inputBuffer[role].lastUpdate=now;
-  state[role]=inputBuffer[role].target;
-}
-
-let visual={};
-for(const r of roles){
-visual[r]={sx:0,sy:0,energy:0,x:0,y:0,vx:0,vy:0,ready:true,initialized:false};
-}
-
-serverInput.value="wss://motion-websocket-server.onrender.com";
-
-function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
-function lerp(a,b,t){return a+(b-a)*t}
-
-function connectWs(){
-ws=new WebSocket(serverInput.value.trim());
-ws.onopen=()=>statusEl.textContent="connected";
-ws.onclose=()=>statusEl.textContent="disconnected";
-ws.onerror=()=>statusEl.textContent="websocket error";
-ws.onmessage=(ev)=>{
-try{
-const msg=JSON.parse(ev.data);
-if(msg.type==="state"&&msg.roles){
-  for(const r of roles){
-    if(msg.roles[r]) updateRoleInput(r,msg.roles[r]);
-  }
-}
-}catch(e){}
-};
-}
-
-connectBtn.onclick=connectWs;
-resetBtn.onclick=()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:"reset"}))};
-
-document.getElementById("fullscreenBtn").onclick=()=>{
-document.documentElement.requestFullscreen().catch(e=>console.log(e));
-};
-
-let wakeLock=null;
-async function enableWakeLock(){
-try{wakeLock=await navigator.wakeLock.request("screen");}catch(e){console.log(e)}
-}
-document.getElementById("wakeBtn").onclick=enableWakeLock;
-document.addEventListener("visibilitychange",()=>{if(wakeLock!==null&&document.visibilityState==="visible")enableWakeLock()});
-
-let uiTimeout=null;
-function showUI(){
-ui.classList.remove("hidden");
-if(uiTimeout)clearTimeout(uiTimeout);
-uiTimeout=setTimeout(()=>ui.classList.add("hidden"),3000);
-}
-document.addEventListener("mousemove",showUI);
-document.addEventListener("click",showUI);
-showUI();
-
-function getSceneParams(scene){
-if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
-if(scene==="B")return{baseSize:.03,scaleGain:.76,maxScale:4.8,brightnessBase:.34,brightnessGain:.38,globalAmbient:.22,glowSpread:1.42,formAlpha:1,formGlow:24,glowColor:null,invertMode:false};
-if(scene==="C")return{baseSize:.05,scaleGain:1.16,maxScale:6.7,brightnessBase:.60,brightnessGain:.72,globalAmbient:.46,glowSpread:1.48,formAlpha:.98,formGlow:42,glowColor:null,invertMode:false};
-return{baseSize:.03,scaleGain:.46,maxScale:3,brightnessBase:.10,brightnessGain:.72,globalAmbient:.14,glowSpread:1.40,formAlpha:.72,formGlow:42,glowColor:[255,255,255],invertMode:true};
-}
-
-function getRoleColor(role){
-if(role==="Piano1")return[255,120,200];
-if(role==="Piano2")return[120,255,120];
-if(role==="Perc1")return[255,100,100];
-return[100,120,255];
-}
-
-function getRoleDirection(role){
-if(role==="Piano1")return[-1,-1];
-if(role==="Piano2")return[1,-1];
-if(role==="Perc1")return[-1,1];
-return[1,1];
-}
-
-function getRoleQuadrantPoint(role,w,h){
-// Scene D / inverse: each ensemble role lives in its own screen quadrant.
-// Keep this conservative so Scene D keeps its current size logic but is no longer center-stacked.
-if(role==="Piano1")return{x:w*.28,y:h*.28};
-if(role==="Piano2")return{x:w*.72,y:h*.28};
-if(role==="Perc1")return{x:w*.28,y:h*.72};
-return{x:w*.72,y:h*.72};
-}
-
-let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
-let particles=[];
-let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
-
-function spawnParticles(role,scene,x,y,energy){
-if(scene==="B")return;
-
-const rgb=getRoleColor(role);
-let count=scene==="C"?42:28;
-let color=scene==="C"?[255,225,150]:[Math.round(rgb[0]*.55),Math.round(rgb[1]*.55),Math.round(rgb[2]*.55)];
-let speedMin=scene==="C"?3.2:1.6;
-let speedMax=scene==="C"?9.0:5.2;
-let life=scene==="C"?.976:.982;
-let alpha=scene==="C"?.70:.60;
-let drag=scene==="C"?.985:.99;
-let gravity=scene==="D"?.008:0;
-let shapeType=scene==="D"?"darkShard":"gold";
-
-const minDim=Math.min(canvas.width,canvas.height);
-const startRadius=minDim*.22;
-const startJitter=minDim*.16;
-
-count=Math.round(count*clamp(energy/8,.55,1.15));
-
-for(let i=0;i<count;i++){
-const a=Math.random()*Math.PI*2;
-const sp=speedMin+Math.random()*(speedMax-speedMin);
-const r=startRadius+Math.random()*startJitter;
-const moveAngle=a+(Math.random()-.5)*.9;
-
-if(particles.length>SMOOTH_PROFILE.maxParticles)particles.splice(0,particles.length-SMOOTH_PROFILE.maxParticles);
-particles.push({
-x:x+Math.cos(a)*r,
-y:y+Math.sin(a)*r,
-vx:Math.cos(moveAngle)*sp*(.55+Math.random()*.8),
-vy:Math.sin(moveAngle)*sp*(.55+Math.random()*.8),
-life:1,
-decay:life-(Math.random()*.02),
-size:1.4+Math.random()*4.5,
-color:color,
-alpha:alpha*(.45+Math.random()*.65),
-gravity:gravity*(.5+Math.random()),
-drag:drag-(Math.random()*.012),
-rot:Math.random()*Math.PI*2,
-vr:(Math.random()-.5)*.16,
-shapeType:shapeType
-});
-}
-}
-
-function updateParticles(){
-for(let i=particles.length-1;i>=0;i--){
-const p=particles[i];
-p.x+=p.vx;
-p.y+=p.vy;
-p.vy+=p.gravity;
-p.vx*=p.drag;
-p.vy*=p.drag;
-p.rot+=p.vr;
-p.vx+=Math.sin(p.y*.01+p.life*5)*.006;
-p.vy+=Math.cos(p.x*.01+p.life*4)*.006;
-p.life*=p.decay;
-if(p.life<.025)particles.splice(i,1);
-}
-}
-
-function drawParticles(){
-ctx.save();
-for(const p of particles){
-ctx.globalAlpha=p.alpha*p.life;
-ctx.fillStyle=`rgb(${p.color[0]},${p.color[1]},${p.color[2]})`;
-
-if(p.shapeType==="darkShard"){
-ctx.save();
-ctx.translate(p.x,p.y);
-ctx.rotate(p.rot);
-ctx.fillRect(-p.size/2,-p.size/2,p.size*2.4,p.size*.45);
-ctx.restore();
-}else{
-ctx.beginPath();
-ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
-ctx.fill();
-}
-}
-ctx.restore();
-ctx.globalAlpha=1;
-}
-
-function drawGlow(cx,cy,rgb,alpha,w,h,spread){
-const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(w,h)*spread);
-g.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
-g.addColorStop(.38,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha*.45})`);
-g.addColorStop(1,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
-ctx.fillStyle=g;
-ctx.fillRect(0,0,w,h);
-}
-
-function drawPath(role,sx,sy){
-if(role==="Piano1"){
-ctx.beginPath();
-ctx.ellipse(0,0,48*sx,48*sy,0,0,Math.PI*2);
-ctx.fill();
-}
-else if(role==="Piano2"){
-const r=44;
-ctx.beginPath();
-for(let i=0;i<5;i++){
-const a=-Math.PI/2+i*2*Math.PI/5;
-const x=Math.cos(a)*r*sx;
-const y=Math.sin(a)*r*sy;
-if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
-}
-ctx.closePath();
-ctx.fill();
-}
-else if(role==="Perc1"){
-ctx.beginPath();
-ctx.moveTo(0,-42*sy);
-ctx.lineTo(-38*sx,32*sy);
-ctx.lineTo(38*sx,32*sy);
-ctx.closePath();
-ctx.fill();
-}
-else{
-ctx.fillRect(-38*sx,-38*sy,76*sx,76*sy);
-}
-}
-
-function strokePath(role,sx,sy){
-if(role==="Piano1"){
-ctx.beginPath();
-ctx.ellipse(0,0,48*sx,48*sy,0,0,Math.PI*2);
-ctx.stroke();
-}
-else if(role==="Piano2"){
-const r=44;
-ctx.beginPath();
-for(let i=0;i<5;i++){
-const a=-Math.PI/2+i*2*Math.PI/5;
-const x=Math.cos(a)*r*sx;
-const y=Math.sin(a)*r*sy;
-if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
-}
-ctx.closePath();
-ctx.stroke();
-}
-else if(role==="Perc1"){
-ctx.beginPath();
-ctx.moveTo(0,-42*sy);
-ctx.lineTo(-38*sx,32*sy);
-ctx.lineTo(38*sx,32*sy);
-ctx.closePath();
-ctx.stroke();
-}
-else{
-ctx.strokeRect(-38*sx,-38*sy,76*sx,76*sy);
-}
-}
-
-function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0,is3D=false,scene="A"){
-const rgb=getRoleColor(role);
-ctx.save();
-ctx.translate(cx,cy);
-ctx.rotate(rotation);
-
-if(is3D){
-ctx.save();
-ctx.translate(9,-9);
-ctx.fillStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.34)`;
-drawPath(role,sx*1.02,sy*1.02);
-ctx.restore();
-
-ctx.save();
-ctx.translate(-6,6);
-ctx.fillStyle="rgba(255,255,255,0.18)";
-drawPath(role,sx*0.96,sy*0.96);
-ctx.restore();
-}
-
-ctx.shadowColor=glow;
-ctx.shadowBlur=blur;
-ctx.fillStyle=fill;
-drawPath(role,sx,sy);
-
-if(is3D){
-ctx.save();
-ctx.globalAlpha=.42;
-ctx.translate(-10,-12);
-ctx.scale(.72,.72);
-ctx.fillStyle="rgba(255,255,255,.42)";
-drawPath(role,sx,sy);
-ctx.restore();
-
-ctx.lineWidth=1.4;
-ctx.strokeStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.72)`;
-strokePath(role,sx,sy);
-} else if(scene==="C"){
-ctx.lineWidth=1.1;
-ctx.strokeStyle=`rgba(255,255,255,0.30)`;
-strokePath(role,sx,sy);
-}
-
-ctx.restore();
-}
-
-function smoothValue(current,target,attackMs,releaseMs,dtMs){
-const tau=target>current?attackMs:releaseMs;
-const a=1-Math.exp(-dtMs/Math.max(1,tau));
-return current+(target-current)*a;
-}
-
-let lastFrame=performance.now();
-let lastStatusUpdate=0;
-
-function render(now=performance.now()){
-const dtMs=Math.min(50,now-lastFrame);
-lastFrame=now;
-
-const w=window.innerWidth,h=window.innerHeight,cx=w/2,cy=h/2;
-ctx.setTransform(dpr,0,0,dpr,0,0);
-ctx.fillStyle="rgb(5,5,5)";
-ctx.fillRect(0,0,w,h);
-
-const forced=sceneOverride.value;
-let amb=.1,spread=1.32;
-
-for(const r of roles){
-const st=sampleRole(r,now);
-const sc=getSceneParams(forced==="fromClients"?(st.scene||"A"):forced);
-amb=Math.max(amb,sc.globalAmbient*.65);
-spread=Math.max(spread,sc.glowSpread);
-}
-
-let bright={};
-
-for(const r of roles){
-const st=sampleRole(r,now);
-const scn=forced==="fromClients"?(st.scene||"A"):forced;
-const sc=getSceneParams(scn);
-const e=clamp((st.energy||0)/10,0,1);
-bright[r]=clamp(sc.brightnessBase+e*sc.brightnessGain,sc.brightnessBase,1);
-}
-
-drawGlow(w*.25,h*.25,[255,120,200],Math.max(amb,bright.Piano1||0),w,h,spread);
-drawGlow(w*.75,h*.25,[120,255,120],Math.max(amb,bright.Piano2||0),w,h,spread);
-drawGlow(w*.25,h*.75,[255,100,100],Math.max(amb,bright.Perc1||0),w,h,spread);
-drawGlow(w*.75,h*.75,[100,120,255],Math.max(amb,bright.Perc2||0),w,h,spread);
-
-updateParticles();
-drawParticles();
-
-for(const r of roles){
-const st=sampleRole(r,now);
-const scn=forced==="fromClients"?(st.scene||"A"):forced;
-const sc=getSceneParams(scn);
-
-const targetSx=st.sx||0;
-const targetSy=st.sy||0;
-const targetEnergy=st.energy||0;
-
-const attackMs=scn==="A"?32:scn==="B"?18:scn==="C"?20:22;
-const releaseMs=scn==="A"?86:scn==="B"?68:scn==="C"?74:70;
-
-// Fast re-entry: when new motion arrives after rest, do not wait for the old smoothed
-// value to crawl upward. This removes the perceived "bad connection" delay.
-const risingAgain=(targetSx>visual[r].sx+.035)||(targetSy>visual[r].sy+.035)||(targetEnergy>visual[r].energy+.45);
-const reEntryBoost=risingAgain?0.56:0;
-
-visual[r].sx=smoothValue(visual[r].sx,targetSx,attackMs*(1-reEntryBoost),releaseMs,dtMs);
-visual[r].sy=smoothValue(visual[r].sy,targetSy,attackMs*(1-reEntryBoost),releaseMs,dtMs);
-visual[r].energy=smoothValue(visual[r].energy,targetEnergy,16*(1-reEntryBoost),66,dtMs);
-
-const e=clamp(visual[r].energy/10,0,1);
-
-const sx=clamp(sc.baseSize+visual[r].sx*sc.scaleGain,sc.baseSize,sc.maxScale);
-const sy=clamp(sc.baseSize+visual[r].sy*sc.scaleGain,sc.baseSize,sc.maxScale);
-
-const rgb=getRoleColor(r);
-
-let fill;
-let glow;
-if(sc.invertMode){
-  fill=`rgba(${Math.round(rgb[0]*.55)},${Math.round(rgb[1]*.55)},${Math.round(rgb[2]*.55)},${sc.formAlpha})`;
-  glow=`rgba(255,255,255,.95)`;
-}else if(scn==="B"){
-  fill=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`;
-  glow=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.98)`;
-}else if(scn==="C"){
-  const boosted=rgb.map(v=>Math.min(255,Math.round(v*1.08+18)));
-  fill=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},0.98)`;
-  glow=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},1)`;
-}else{
-  fill=`rgba(255,255,255,${sc.formAlpha})`;
-  glow=`rgba(${(sc.glowColor||[255,255,255])[0]},${(sc.glowColor||[255,255,255])[1]},${(sc.glowColor||[255,255,255])[2]},.95)`;
-}
-const blur=sc.formGlow+visual[r].sx*9+visual[r].sy*9+e*(scn==="B"?34:scn==="C"?24:12);
-
-let drawX=cx;
-let drawY=cy;
-let rotation=0;
-
-const tiltX=clamp((st.tiltX||0)/45,-1,1);
-const tiltY=clamp((st.tiltY||0)/45,-1,1);
-
-if(scn==="D"){
-const home=getRoleQuadrantPoint(r,w,h);
-const driftX=tiltX*w*.055;
-const driftY=tiltY*h*.055;
-const targetX=home.x+driftX;
-const targetY=home.y+driftY;
-if(!visual[r].initialized){
-visual[r].x=targetX;
-visual[r].y=targetY;
-visual[r].vx=0;
-visual[r].vy=0;
-visual[r].initialized=true;
-}
-visual[r].x=lerp(visual[r].x,targetX,.16);
-visual[r].y=lerp(visual[r].y,targetY,.16);
-drawX=visual[r].x;
-drawY=visual[r].y;
-}
-else if((st.mode||"impulse")==="tilt"){
-if(scn==="A"){
-const tiltAmount=Math.sqrt(tiltX*tiltX+tiltY*tiltY);
-const dir=tiltX>=0?1:-1;
-rotations[r]+=dir*(.004+tiltAmount*.07);
-rotation=rotations[r];
-}
-
-if(scn==="C"){
-const dir=getRoleDirection(r);
-const projection=clamp((tiltX*dir[0]+tiltY*dir[1])/2,0,1);
-const bounceTarget=projection*.34;
-
-const targetX=cx+dir[0]*w*bounceTarget;
-const targetY=cy+dir[1]*h*bounceTarget;
-
-if(!visual[r].initialized){
-visual[r].x=cx;
-visual[r].y=cy;
-visual[r].vx=0;
-visual[r].vy=0;
-visual[r].initialized=true;
-}
-
-const moveCatchup=st.fresh?.24:.12;
-visual[r].x=lerp(visual[r].x,targetX,moveCatchup);
-visual[r].y=lerp(visual[r].y,targetY,moveCatchup);
-visual[r].vx=0;
-visual[r].vy=0;
-
-drawX=visual[r].x;
-drawY=visual[r].y;
-}else{
-visual[r].x=lerp(visual[r].x||cx,cx,.06);
-visual[r].y=lerp(visual[r].y||cy,cy,.06);
-}
-}else{
-visual[r].x=lerp(visual[r].x||cx,cx,.06);
-visual[r].y=lerp(visual[r].y||cy,cy,.06);
-}
-
-const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
-if(scaleNorm<.46)visual[r].ready=true;
-
-const nowMs=Date.now();
-const cooldown=scn==="C"?900:scn==="D"?1100:99999;
-
-if((scn==="C"||scn==="D")&&scaleNorm>.92&&visual[r].ready&&nowMs-lastBurst[r]>cooldown){
-spawnParticles(r,scn,drawX,drawY,visual[r].energy||0);
-lastBurst[r]=nowMs;
-visual[r].ready=false;
-}
-
-shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B",scn);
-}
-
-if(now-lastStatusUpdate>250){
-  statusEl.textContent=roles.map(r=>{
-    const st=sampleRole(r,now);
-    return `${r}:${st.connected?"on":"off"} ${st.source||"none"}`;
-  }).join(" | ");
-  lastStatusUpdate=now;
-}
-requestAnimationFrame(render);
-}
-
-requestAnimationFrame(render);
-</script>
+  <h2>Motion Visual</h2>
+
+  <div class="controls">
+    <select id="roleSelect">
+      <option value="Piano1">Piano1</option>
+      <option value="Piano2">Piano2</option>
+      <option value="Perc1">Perc1</option>
+      <option value="Perc2">Perc2</option>
+      <option value="AllForms">All Forms</option>
+    </select>
+
+    <select id="modeSelect">
+      <option value="tilt">Tilt Mode</option>
+      <option value="impulse">Impulse Mode</option>
+    </select>
+
+    <select id="sceneSelect">
+      <option value="A">Scene A: Residual</option>
+      <option value="B">Scene B: Articulation</option>
+      <option value="C">Scene C: Saturation</option>
+      <option value="D">Scene D: Inverse</option>
+    </select>
+
+    <button id="startBtn">Enable Motion</button>
+  </div>
+
+  <div id="status">waiting...</div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const roleSelect = document.getElementById("roleSelect");
+    const modeSelect = document.getElementById("modeSelect");
+    const sceneSelect = document.getElementById("sceneSelect");
+    const startBtn = document.getElementById("startBtn");
+
+    let ax = 0, ay = 0, az = 0;
+    let beta = 0, gamma = 0;
+
+    let filteredX = 0;
+    let filteredY = 0;
+    let motionEnergy = 0;
+
+    let sceneA = 1, sceneB = 0, sceneC = 0, sceneD = 0;
+
+    function clamp(v, lo, hi) {
+      return Math.max(lo, Math.min(hi, v));
+    }
+
+    function attackRelease(current, target, attack, release) {
+      if (target > current) {
+        return current * (1 - attack) + target * attack;
+      } else {
+        return current * (1 - release) + target * release;
+      }
+    }
+
+    function mix(a, b, t) {
+      return a * (1 - t) + b * t;
+    }
+
+    function getRoleColor(role) {
+      if (role === "Piano1") return [255, 120, 200];
+      if (role === "Piano2") return [120, 255, 120];
+      if (role === "Perc1")  return [255, 100, 100];
+      if (role === "Perc2")  return [100, 120, 255];
+      return [255, 255, 255];
+    }
+
+    function getSceneParams(scene) {
+      if (scene === "A") {
+        return {
+          name: "Residual",
+          baseSize: 0.02,
+          scaleGain: 0.24,
+          maxScale: 1.75,
+          brightnessBase: 0.16,
+          brightnessGain: 0.10,
+          globalAmbient: 0.12,
+          attackImpulse: 0.18,
+          releaseImpulse: 0.07,
+          attackTilt: 0.14,
+          releaseTilt: 0.08,
+          energyAttack: 0.18,
+          energyRelease: 0.06,
+          glowSpread: 1.18,
+          formAlpha: 0.58,
+          formGlow: 26,
+          glowColor: [255, 255, 255],
+          centerBoost: 0.00,
+          invertMode: false
+        };
+      }
+      if (scene === "B") {
+        return {
+          name: "Articulation",
+          baseSize: 0.03,
+          scaleGain: 0.38,
+          maxScale: 2.4,
+          brightnessBase: 0.26,
+          brightnessGain: 0.24,
+          globalAmbient: 0.20,
+          attackImpulse: 0.88,
+          releaseImpulse: 0.18,
+          attackTilt: 0.65,
+          releaseTilt: 0.18,
+          energyAttack: 0.80,
+          energyRelease: 0.14,
+          glowSpread: 1.38,
+          formAlpha: 1.0,
+          formGlow: 10,
+          glowColor: [255, 255, 255],
+          centerBoost: 0.72,
+          invertMode: false,
+          bgPulse: 0.05,
+          bgMotionBoost: 0.55
+        };
+      }
+
+      if (scene === "C") {
+        return {
+          name: "Saturation",
+          baseSize: 0.05,
+          scaleGain: 0.58,
+          maxScale: 3.35,
+          brightnessBase: 0.52,
+          brightnessGain: 0.58,
+          globalAmbient: 0.42,
+          attackImpulse: 0.86,
+          releaseImpulse: 0.06,
+          attackTilt: 0.62,
+          releaseTilt: 0.08,
+          energyAttack: 0.82,
+          energyRelease: 0.06,
+          glowSpread: 1.42,
+          formAlpha: 0.96,
+          formGlow: 34,
+          glowColor: [255, 225, 150],
+          centerBoost: 0.14,
+          invertMode: false,
+          bgPulse: 0.03,
+          bgMotionBoost: 0.95
+        };
+      }
+
+      return {
+        name: "Inverse",
+        baseSize: 0.03,
+        scaleGain: 0.46,
+        maxScale: 3.0,
+        brightnessBase: 0.08,
+        brightnessGain: 0.70,
+        globalAmbient: 0.10,
+        attackImpulse: 0.86,
+        releaseImpulse: 0.06,
+        attackTilt: 0.66,
+        releaseTilt: 0.08,
+        energyAttack: 0.82,
+        energyRelease: 0.06,
+        glowSpread: 1.28,
+        formAlpha: 0.72,
+        formGlow: 42,
+        glowColor: [255, 255, 255],
+        centerBoost: 0.10,
+        invertMode: true
+      };
+    }
+
+    async function startMotion() {
+      statusEl.textContent = "requesting permission...";
+
+      try {
+        const needsPermission =
+          typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function";
+
+        if (needsPermission) {
+          const motionPermission = await DeviceMotionEvent.requestPermission();
+          let orientationPermission = "granted";
+
+          if (
+            typeof DeviceOrientationEvent !== "undefined" &&
+            typeof DeviceOrientationEvent.requestPermission === "function"
+          ) {
+            orientationPermission = await DeviceOrientationEvent.requestPermission();
+          }
+
+          if (motionPermission === "granted" && orientationPermission === "granted") {
+            window.addEventListener("devicemotion", handleMotion);
+            window.addEventListener("deviceorientation", handleOrientation);
+            statusEl.textContent = "motion ON";
+          } else {
+            statusEl.textContent =
+              "denied: motion=" + motionPermission + ", orientation=" + orientationPermission;
+          }
+        } else {
+          window.addEventListener("devicemotion", handleMotion);
+          window.addEventListener("deviceorientation", handleOrientation);
+          statusEl.textContent = "motion ON";
+        }
+      } catch (e) {
+        statusEl.textContent = "error: " + e;
+      }
+    }
+
+    function handleOrientation(e) {
+      beta = e.beta || 0;
+      gamma = e.gamma || 0;
+    }
+
+    function updateSceneBlend() {
+      const target = sceneSelect.value;
+      sceneA = attackRelease(sceneA, target === "A" ? 1 : 0, 0.12, 0.12);
+      sceneB = attackRelease(sceneB, target === "B" ? 1 : 0, 0.12, 0.12);
+      sceneC = attackRelease(sceneC, target === "C" ? 1 : 0, 0.12, 0.12);
+      sceneD = attackRelease(sceneD, target === "D" ? 1 : 0, 0.12, 0.12);
+    }
+
+    function handleMotion(e) {
+      const acc = e.accelerationIncludingGravity || e.acceleration || { x: 0, y: 0, z: 0 };
+
+      ax = acc.x || 0;
+      ay = acc.y || 0;
+      az = acc.z || 0;
+
+      const mode = modeSelect.value;
+      const scene = getSceneParams(sceneSelect.value);
+
+      let targetX = 0;
+      let targetY = 0;
+
+      if (mode === "tilt") {
+        targetX = clamp(Math.abs(gamma) / 18, 0, 2.5);
+        targetY = clamp(Math.abs(beta) / 22, 0, 2.5);
+
+        filteredX = attackRelease(filteredX, targetX, scene.attackTilt, scene.releaseTilt);
+        filteredY = attackRelease(filteredY, targetY, scene.attackTilt, scene.releaseTilt);
+      } else {
+        targetX = clamp(Math.abs(ax), 0, 10);
+        targetY = clamp(Math.abs(ay), 0, 10);
+
+        filteredX = attackRelease(filteredX, targetX, scene.attackImpulse, scene.releaseImpulse);
+        filteredY = attackRelease(filteredY, targetY, scene.attackImpulse, scene.releaseImpulse);
+      }
+
+      const total = clamp(Math.abs(ax) + Math.abs(ay) + Math.abs(az - 9.81), 0, 24);
+      motionEnergy = attackRelease(motionEnergy, total, scene.energyAttack, scene.energyRelease);
+
+      statusEl.textContent =
+        roleSelect.value +
+        " | " + mode +
+        " | Scene " + sceneSelect.value +
+        " | ax:" + ax.toFixed(2) +
+        " ay:" + ay.toFixed(2) +
+        " beta:" + beta.toFixed(1) +
+        " gamma:" + gamma.toFixed(1);
+    }
+
+    function drawGlow(cx, cy, rgb, alpha, w, h, spread) {
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * spread);
+      grad.addColorStop(0, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
+      grad.addColorStop(0.38, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha * 0.45})`);
+      grad.addColorStop(1, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawCenterLight(alpha, w, h) {
+      const grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.45);
+      grad.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      grad.addColorStop(0.45, `rgba(255,255,255,${alpha * 0.24})`);
+      grad.addColorStop(1, `rgba(255,255,255,0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawShapeGlow(glowColor, glowBlur) {
+      ctx.shadowColor = `rgba(${glowColor[0]},${glowColor[1]},${glowColor[2]},0.95)`;
+      ctx.shadowBlur = glowBlur;
+    }
+
+    function clearShapeGlow() {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    }
+
+    function drawCircle(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
+      ctx.save();
+      drawShapeGlow(glowColor, glowBlur);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 48 * sx, 48 * sy, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fillStyle(alpha);
+      ctx.fill();
+      clearShapeGlow();
+      ctx.restore();
+    }
+
+    function drawTriangle(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
+      ctx.save();
+      drawShapeGlow(glowColor, glowBlur);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 42 * sy);
+      ctx.lineTo(cx - 38 * sx, cy + 32 * sy);
+      ctx.lineTo(cx + 38 * sx, cy + 32 * sy);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle(alpha);
+      ctx.fill();
+      clearShapeGlow();
+      ctx.restore();
+    }
+
+    function drawSquare(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
+      ctx.save();
+      drawShapeGlow(glowColor, glowBlur);
+      const w = 76 * sx;
+      const h = 76 * sy;
+      ctx.fillStyle = fillStyle(alpha);
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+      clearShapeGlow();
+      ctx.restore();
+    }
+
+    function drawPentagon(cx, cy, sx, sy, fillStyle, alpha, glowColor, glowBlur) {
+      ctx.save();
+      drawShapeGlow(glowColor, glowBlur);
+      const r = 44;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+        const x = cx + Math.cos(a) * r * sx;
+        const y = cy + Math.sin(a) * r * sy;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fillStyle(alpha);
+      ctx.fill();
+      clearShapeGlow();
+      ctx.restore();
+    }
+
+    function render() {
+      updateSceneBlend();
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight * 0.8;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      const role = roleSelect.value;
+      const energyNorm = clamp(motionEnergy / 10, 0, 1.0);
+
+      const sA = getSceneParams("A");
+      const sB = getSceneParams("B");
+      const sC = getSceneParams("C");
+      const sD = getSceneParams("D");
+
+      const brightnessBase =
+        sA.brightnessBase * sceneA +
+        sB.brightnessBase * sceneB +
+        sC.brightnessBase * sceneC +
+        sD.brightnessBase * sceneD;
+
+      const brightnessGain =
+        sA.brightnessGain * sceneA +
+        sB.brightnessGain * sceneB +
+        sC.brightnessGain * sceneC +
+        sD.brightnessGain * sceneD;
+
+      const globalAmbient =
+        sA.globalAmbient * sceneA +
+        sB.globalAmbient * sceneB +
+        sC.globalAmbient * sceneC +
+        sD.globalAmbient * sceneD;
+
+      const glowSpread =
+        sA.glowSpread * sceneA +
+        sB.glowSpread * sceneB +
+        sC.glowSpread * sceneC +
+        sD.glowSpread * sceneD;
+
+      const centerBoost =
+        sA.centerBoost * sceneA +
+        sB.centerBoost * sceneB +
+        sC.centerBoost * sceneC +
+        sD.centerBoost * sceneD;
+
+      const activeBrightness = clamp(
+        brightnessBase + energyNorm * brightnessGain,
+        brightnessBase,
+        1.0
+      );
+
+      // all colors always slightly present
+      let tl = globalAmbient;
+      let tr = globalAmbient;
+      let bl = globalAmbient;
+      let br = globalAmbient;
+
+      if (role === "Piano1") tl = activeBrightness;
+      if (role === "Piano2") tr = activeBrightness;
+      if (role === "Perc1") bl = activeBrightness;
+      if (role === "Perc2") br = activeBrightness;
+
+      if (role === "AllForms") {
+        tl = activeBrightness;
+        tr = activeBrightness;
+        bl = activeBrightness;
+        br = activeBrightness;
+      }
+
+      // unified dark base, no hard quadrants
+      const bgWhite = clamp(0.02 + sceneD * (0.08 + energyNorm * 0.72), 0.02, 0.90);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = `rgba(${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},${Math.round(255 * bgWhite)},1)`;
+      ctx.fillRect(0, 0, w, h);
+
+      drawGlow(w * 0.25, h * 0.25, [255, 120, 200], tl, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.25, [120, 255, 120], tr, w, h, glowSpread);
+      drawGlow(w * 0.25, h * 0.75, [255, 100, 100], bl, w, h, glowSpread);
+      drawGlow(w * 0.75, h * 0.75, [100, 120, 255], br, w, h, glowSpread);
+
+      if (centerBoost > 0.01) {
+        drawCenterLight(centerBoost * energyNorm, w, h);
+      }
+
+      function motionState(motionSceneKey, visualSceneKey) {
+        const motionParams = getSceneParams(motionSceneKey);
+        const visualParams = getSceneParams(visualSceneKey);
+      
+        const dynamicGlow =
+          visualParams.formGlow +
+          filteredX * 8 +
+          filteredY * 8 +
+          energyNorm * (visualSceneKey === "B" ? 24 : 12);
+      
+        return {
+          sx: clamp(
+            motionParams.baseSize + filteredX * motionParams.scaleGain,
+            motionParams.baseSize,
+            motionParams.maxScale
+          ),
+          sy: clamp(
+            motionParams.baseSize + filteredY * motionParams.scaleGain,
+            motionParams.baseSize,
+            motionParams.maxScale
+          ),
+          alpha: visualParams.formAlpha * (1 - (visualSceneKey === "D" ? energyNorm * 0.10 : 0)),
+          glowBlur: dynamicGlow,
+          glowColor: visualParams.glowColor,
+          invertMode: visualParams.invertMode
+        };
+      }
+      function whiteFill(alpha) {
+        return `rgba(255,255,255,${alpha})`;
+      }
+
+      function darkRoleFill(rgb, alpha) {
+        const darken = 0.45;
+        const r = Math.round(rgb[0] * (1 - darken));
+        const g = Math.round(rgb[1] * (1 - darken));
+        const b = Math.round(rgb[2] * (1 - darken));
+        return `rgba(${r},${g},${b},${alpha})`;
+      }
+
+      const p1Color = getRoleColor("Piano1");
+      const p2Color = getRoleColor("Piano2");
+      const pc1Color = getRoleColor("Perc1");
+      const pc2Color = getRoleColor("Perc2");
+
+      function drawRole(drawFn, rgb, state) {
+        const fillFn = state.invertMode ? (a) => darkRoleFill(rgb, a) : (a) => whiteFill(a);
+        drawFn(cx, cy, state.sx, state.sy, fillFn, state.alpha, state.glowColor, state.glowBlur);
+      }
+
+      if (role !== "AllForms") {
+        const state = motionState(sceneSelect.value, sceneSelect.value);
+      
+        if (role === "Piano1") drawRole(drawCircle, p1Color, state);
+        if (role === "Piano2") drawRole(drawPentagon, p2Color, state);
+        if (role === "Perc1") drawRole(drawTriangle, pc1Color, state);
+        if (role === "Perc2") drawRole(drawSquare, pc2Color, state);
+      } else {
+        // motion behavior differs per form
+        // visual coloring follows ONLY the globally selected scene
+        const visualScene = sceneSelect.value;
+      
+        drawRole(drawCircle,   p1Color,  motionState("A", visualScene));
+        drawRole(drawPentagon, p2Color,  motionState("B", visualScene));
+        drawRole(drawTriangle, pc1Color, motionState("C", visualScene));
+        drawRole(drawSquare,   pc2Color, motionState("D", visualScene));
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    startBtn.addEventListener("click", startMotion);
+    render();
+  </script>
 </body>
 </html>
