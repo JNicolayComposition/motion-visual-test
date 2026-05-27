@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Master Visual Master</title>
+<title>Master Visual - Low Latency Spatial</title>
 
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
@@ -132,6 +132,36 @@ function updateRoleInput(role,next){
 let visual={};
 for(const r of roles){
 visual[r]={sx:0,sy:0,energy:0,x:0,y:0,vx:0,vy:0,ready:true,initialized:false};
+}
+
+let sceneMemory={};
+for(const r of roles){
+sceneMemory[r]={scene:"A",candidate:"A",since:performance.now()};
+}
+
+function stableSceneFor(role,requested,now){
+  const allowed={A:true,B:true,C:true,D:true};
+  const next=allowed[requested]?requested:"A";
+  const m=sceneMemory[role];
+
+  if(next===m.scene){
+    m.candidate=next;
+    m.since=now;
+    return m.scene;
+  }
+
+  if(next!==m.candidate){
+    m.candidate=next;
+    m.since=now;
+    return m.scene;
+  }
+
+  // Accept a scene change only if it persists briefly.
+  // This filters accidental one-frame jumps into old/residual client states.
+  if(now-m.since>140){
+    m.scene=next;
+  }
+  return m.scene;
 }
 
 serverInput.value="wss://motion-websocket-server.onrender.com";
@@ -377,14 +407,14 @@ ctx.rotate(rotation);
 
 if(is3D){
 ctx.save();
-ctx.translate(9,-9);
-ctx.fillStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.34)`;
-drawPath(role,sx*1.02,sy*1.02);
+ctx.translate(7,-7);
+ctx.fillStyle="rgba(120,140,180,0.22)";
+drawPath(role,sx*1.01,sy*1.01);
 ctx.restore();
 
 ctx.save();
-ctx.translate(-6,6);
-ctx.fillStyle="rgba(255,255,255,0.18)";
+ctx.translate(-5,5);
+ctx.fillStyle="rgba(255,255,255,0.16)";
 drawPath(role,sx*0.96,sy*0.96);
 ctx.restore();
 }
@@ -403,8 +433,8 @@ ctx.fillStyle="rgba(255,255,255,.42)";
 drawPath(role,sx,sy);
 ctx.restore();
 
-ctx.lineWidth=1.4;
-ctx.strokeStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.72)`;
+ctx.lineWidth=1.2;
+ctx.strokeStyle="rgba(255,255,255,.38)";
 strokePath(role,sx,sy);
 } else if(scene==="C"){
 ctx.lineWidth=1.1;
@@ -438,7 +468,8 @@ let amb=.1,spread=1.32;
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const sc=getSceneParams(forced==="fromClients"?(st.scene||"A"):forced);
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
+const sc=getSceneParams(scn);
 amb=Math.max(amb,sc.globalAmbient*.65);
 spread=Math.max(spread,sc.glowSpread);
 }
@@ -447,7 +478,7 @@ let bright={};
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const scn=forced==="fromClients"?(st.scene||"A"):forced;
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
 const sc=getSceneParams(scn);
 const e=clamp((st.energy||0)/10,0,1);
 bright[r]=clamp(sc.brightnessBase+e*sc.brightnessGain,sc.brightnessBase,1);
@@ -463,7 +494,7 @@ drawParticles();
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const scn=forced==="fromClients"?(st.scene||"A"):forced;
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
 const sc=getSceneParams(scn);
 
 const targetSx=st.sx||0;
@@ -495,12 +526,13 @@ if(sc.invertMode){
   fill=`rgba(${Math.round(rgb[0]*.55)},${Math.round(rgb[1]*.55)},${Math.round(rgb[2]*.55)},${sc.formAlpha})`;
   glow=`rgba(255,255,255,.95)`;
 }else if(scn==="B"){
-  fill=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`;
+  // Scene B: keep the figure itself bright/white; only the halo/background is role-colored.
+  fill=`rgba(255,255,255,${sc.formAlpha})`;
   glow=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.98)`;
 }else if(scn==="C"){
-  const boosted=rgb.map(v=>Math.min(255,Math.round(v*1.08+18)));
-  fill=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},0.98)`;
-  glow=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},1)`;
+  // Scene C: keep the figure itself golden/bright; only the halo/background is role-colored.
+  fill=`rgba(255,245,220,${sc.formAlpha})`;
+  glow=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},1)`;
 }else{
   fill=`rgba(255,255,255,${sc.formAlpha})`;
   glow=`rgba(${(sc.glowColor||[255,255,255])[0]},${(sc.glowColor||[255,255,255])[1]},${(sc.glowColor||[255,255,255])[2]},.95)`;
