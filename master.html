@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Master Visual - Low Latency Spatial</title>
+<title>Master Visual Master</title>
 
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
@@ -54,10 +54,10 @@ const roles=["Piano1","Piano2","Perc1","Perc2"];
 let ws=null,state={};
 
 const SMOOTH_PROFILE={
-  interpMs:42,          // lower = more direct between websocket updates
-  staleAfterMs:42,      // peaks start falling almost immediately
-  gestureDecayMs:90,    // lower = maxima do not hang
-  energyDecayMs:55,     // energy flashes fall faster
+  interpMs:62,          // stable, but still fills gaps between websocket updates
+  staleAfterMs:95,      // prevents the visual from falling asleep too early
+  gestureDecayMs:190,   // smoother decay; avoids jitter and stop/start locking
+  energyDecayMs:105,    // short enough for impulses, long enough to reconnect cleanly
   maxParticles:520
 };
 
@@ -111,6 +111,8 @@ function sampleRole(role,now=performance.now()){
     energy:mix(numberOr(prev.energy),numberOr(target.energy),t)*energyFresh,
     tiltX:mix(numberOr(prev.tiltX),numberOr(target.tiltX),t),
     tiltY:mix(numberOr(prev.tiltY),numberOr(target.tiltY),t),
+    confidence:clamp(1-(hold/650),0,1),
+    fresh:age<260,
     mode:target.mode||"impulse",
     scene:target.scene||"A",
     source:target.source||"none",
@@ -468,12 +470,17 @@ const targetSx=st.sx||0;
 const targetSy=st.sy||0;
 const targetEnergy=st.energy||0;
 
-const attackMs=scn==="A"?24:scn==="B"?10:scn==="C"?12:16;
-const releaseMs=scn==="A"?72:scn==="B"?34:scn==="C"?38:54;
+const attackMs=scn==="A"?32:scn==="B"?18:scn==="C"?20:22;
+const releaseMs=scn==="A"?86:scn==="B"?68:scn==="C"?74:70;
 
-visual[r].sx=smoothValue(visual[r].sx,targetSx,attackMs,releaseMs,dtMs);
-visual[r].sy=smoothValue(visual[r].sy,targetSy,attackMs,releaseMs,dtMs);
-visual[r].energy=smoothValue(visual[r].energy,targetEnergy,10,38,dtMs);
+// Fast re-entry: when new motion arrives after rest, do not wait for the old smoothed
+// value to crawl upward. This removes the perceived "bad connection" delay.
+const risingAgain=(targetSx>visual[r].sx+.035)||(targetSy>visual[r].sy+.035)||(targetEnergy>visual[r].energy+.45);
+const reEntryBoost=risingAgain?0.56:0;
+
+visual[r].sx=smoothValue(visual[r].sx,targetSx,attackMs*(1-reEntryBoost),releaseMs,dtMs);
+visual[r].sy=smoothValue(visual[r].sy,targetSy,attackMs*(1-reEntryBoost),releaseMs,dtMs);
+visual[r].energy=smoothValue(visual[r].energy,targetEnergy,16*(1-reEntryBoost),66,dtMs);
 
 const e=clamp(visual[r].energy/10,0,1);
 
@@ -520,8 +527,8 @@ visual[r].vx=0;
 visual[r].vy=0;
 visual[r].initialized=true;
 }
-visual[r].x=lerp(visual[r].x,targetX,.22);
-visual[r].y=lerp(visual[r].y,targetY,.22);
+visual[r].x=lerp(visual[r].x,targetX,.16);
+visual[r].y=lerp(visual[r].y,targetY,.16);
 drawX=visual[r].x;
 drawY=visual[r].y;
 }
@@ -549,12 +556,11 @@ visual[r].vy=0;
 visual[r].initialized=true;
 }
 
-visual[r].vx+=(targetX-visual[r].x)*.075;
-visual[r].vy+=(targetY-visual[r].y)*.075;
-visual[r].vx*=.84;
-visual[r].vy*=.84;
-visual[r].x+=visual[r].vx;
-visual[r].y+=visual[r].vy;
+const moveCatchup=st.fresh?.24:.12;
+visual[r].x=lerp(visual[r].x,targetX,moveCatchup);
+visual[r].y=lerp(visual[r].y,targetY,moveCatchup);
+visual[r].vx=0;
+visual[r].vy=0;
 
 drawX=visual[r].x;
 drawY=visual[r].y;
@@ -568,7 +574,7 @@ visual[r].y=lerp(visual[r].y||cy,cy,.06);
 }
 
 const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
-if(scaleNorm<.58)visual[r].ready=true;
+if(scaleNorm<.46)visual[r].ready=true;
 
 const nowMs=Date.now();
 const cooldown=scn==="C"?900:scn==="D"?1100:99999;
