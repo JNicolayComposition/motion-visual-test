@@ -42,7 +42,7 @@ canvas{display:block;width:100vw;height:100vh}
 
 <script>
 const canvas=document.getElementById("c"),
-ctx=canvas.getContext("2d",{alpha:false,desynchronized:true}),
+ctx=canvas.getContext("2d"),
 statusEl=document.getElementById("status"),
 serverInput=document.getElementById("serverInput"),
 connectBtn=document.getElementById("connectBtn"),
@@ -53,8 +53,78 @@ ui=document.getElementById("topbar");
 const roles=["Piano1","Piano2","Perc1","Perc2"];
 let ws=null,state={};
 
+const SMOOTH_PROFILE={
+  interpMs:70,          // fills gaps between incoming websocket chunks
+  staleAfterMs:85,      // after this, gesture peaks start falling quickly
+  gestureDecayMs:150,   // sx/sy peak decay; lower = less "stuck" maxima
+  energyDecayMs:95,     // energy peak decay; lower = shorter flashes
+  maxParticles:520
+};
+
+let dpr=1;
+function resizeCanvas(){
+  dpr=Math.min(window.devicePixelRatio||1,1.65);
+  const w=Math.floor(window.innerWidth*dpr);
+  const h=Math.floor(window.innerHeight*dpr);
+  if(canvas.width!==w||canvas.height!==h){
+    canvas.width=w;
+    canvas.height=h;
+    canvas.style.width=window.innerWidth+"px";
+    canvas.style.height=window.innerHeight+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+}
+window.addEventListener("resize",resizeCanvas,{passive:true});
+resizeCanvas();
+
 for(const r of roles){
 state[r]={sx:0,sy:0,energy:0,tiltX:0,tiltY:0,mode:"impulse",scene:"A",source:"none",connected:false};
+}
+
+let inputBuffer={};
+for(const r of roles){
+inputBuffer[r]={
+  prev:{...state[r]},
+  target:{...state[r]},
+  start:performance.now(),
+  lastUpdate:performance.now()
+};
+}
+
+function mix(a,b,t){return a+(b-a)*t}
+function smoothstep(t){return t*t*(3-2*t)}
+function numberOr(v,fallback=0){return Number.isFinite(+v)?+v:fallback}
+
+function sampleRole(role,now=performance.now()){
+  const b=inputBuffer[role];
+  const rawT=clamp((now-b.start)/SMOOTH_PROFILE.interpMs,0,1);
+  const t=smoothstep(rawT);
+  const prev=b.prev,target=b.target;
+  const age=now-b.lastUpdate;
+  const hold=Math.max(0,age-SMOOTH_PROFILE.staleAfterMs);
+  const gestureFresh=Math.exp(-hold/SMOOTH_PROFILE.gestureDecayMs);
+  const energyFresh=Math.exp(-hold/SMOOTH_PROFILE.energyDecayMs);
+
+  return {
+    sx:mix(numberOr(prev.sx),numberOr(target.sx),t)*gestureFresh,
+    sy:mix(numberOr(prev.sy),numberOr(target.sy),t)*gestureFresh,
+    energy:mix(numberOr(prev.energy),numberOr(target.energy),t)*energyFresh,
+    tiltX:mix(numberOr(prev.tiltX),numberOr(target.tiltX),t),
+    tiltY:mix(numberOr(prev.tiltY),numberOr(target.tiltY),t),
+    mode:target.mode||"impulse",
+    scene:target.scene||"A",
+    source:target.source||"none",
+    connected:!!target.connected
+  };
+}
+
+function updateRoleInput(role,next){
+  const now=performance.now();
+  inputBuffer[role].prev=sampleRole(role,now);
+  inputBuffer[role].target={...state[role],...(next||{})};
+  inputBuffer[role].start=now;
+  inputBuffer[role].lastUpdate=now;
+  state[role]=inputBuffer[role].target;
 }
 
 let visual={};
@@ -75,7 +145,11 @@ ws.onerror=()=>statusEl.textContent="websocket error";
 ws.onmessage=(ev)=>{
 try{
 const msg=JSON.parse(ev.data);
-if(msg.type==="state"&&msg.roles){state=msg.roles;}
+if(msg.type==="state"&&msg.roles){
+  for(const r of roles){
+    if(msg.roles[r]) updateRoleInput(r,msg.roles[r]);
+  }
+}
 }catch(e){}
 };
 }
@@ -127,31 +201,7 @@ return[1,1];
 
 let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 let particles=[];
-const MAX_PARTICLES=420;
 let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
-
-// Performance/responsiveness
-let vw=0, vh=0, dpr=1;
-let lastFrameTime=performance.now();
-let lastStatusUpdate=0;
-
-function resizeCanvas(){
-  const nextDpr=Math.min(window.devicePixelRatio||1,2);
-  const nextW=Math.floor(window.innerWidth*nextDpr);
-  const nextH=Math.floor(window.innerHeight*nextDpr);
-  if(canvas.width!==nextW||canvas.height!==nextH){
-    dpr=nextDpr;
-    vw=window.innerWidth;
-    vh=window.innerHeight;
-    canvas.width=nextW;
-    canvas.height=nextH;
-    canvas.style.width=vw+"px";
-    canvas.style.height=vh+"px";
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-}
-window.addEventListener("resize",resizeCanvas,{passive:true});
-resizeCanvas();
 
 function spawnParticles(role,scene,x,y,energy){
 if(scene==="B")return;
@@ -179,6 +229,7 @@ const sp=speedMin+Math.random()*(speedMax-speedMin);
 const r=startRadius+Math.random()*startJitter;
 const moveAngle=a+(Math.random()-.5)*.9;
 
+if(particles.length>SMOOTH_PROFILE.maxParticles)particles.splice(0,particles.length-SMOOTH_PROFILE.maxParticles);
 particles.push({
 x:x+Math.cos(a)*r,
 y:y+Math.sin(a)*r,
@@ -195,9 +246,6 @@ rot:Math.random()*Math.PI*2,
 vr:(Math.random()-.5)*.16,
 shapeType:shapeType
 });
-}
-if(particles.length>MAX_PARTICLES){
-  particles.splice(0,particles.length-MAX_PARTICLES);
 }
 }
 
@@ -351,18 +399,20 @@ strokePath(role,sx,sy);
 ctx.restore();
 }
 
-function smoothValue(current,target,attack,release,dtFactor=1){
-const k=target>current?attack:release;
-const t=1-Math.pow(1-k,dtFactor);
-return current+(target-current)*t;
+function smoothValue(current,target,attackMs,releaseMs,dtMs){
+const tau=target>current?attackMs:releaseMs;
+const a=1-Math.exp(-dtMs/Math.max(1,tau));
+return current+(target-current)*a;
 }
 
-function render(now=performance.now()){
-const dtFactor=clamp((now-lastFrameTime)/16.666,0.5,2.5);
-lastFrameTime=now;
-resizeCanvas();
+let lastFrame=performance.now();
+let lastStatusUpdate=0;
 
-const w=vw,h=vh,cx=w/2,cy=h/2;
+function render(now=performance.now()){
+const dtMs=Math.min(50,now-lastFrame);
+lastFrame=now;
+
+const w=window.innerWidth,h=window.innerHeight,cx=w/2,cy=h/2;
 ctx.setTransform(dpr,0,0,dpr,0,0);
 ctx.fillStyle="rgb(5,5,5)";
 ctx.fillRect(0,0,w,h);
@@ -371,7 +421,8 @@ const forced=sceneOverride.value;
 let amb=.1,spread=1.32;
 
 for(const r of roles){
-const sc=getSceneParams(forced==="fromClients"?(state[r]?.scene||"A"):forced);
+const st=sampleRole(r,now);
+const sc=getSceneParams(forced==="fromClients"?(st.scene||"A"):forced);
 amb=Math.max(amb,sc.globalAmbient*.65);
 spread=Math.max(spread,sc.glowSpread);
 }
@@ -379,7 +430,7 @@ spread=Math.max(spread,sc.glowSpread);
 let bright={};
 
 for(const r of roles){
-const st=state[r]||{};
+const st=sampleRole(r,now);
 const scn=forced==="fromClients"?(st.scene||"A"):forced;
 const sc=getSceneParams(scn);
 const e=clamp((st.energy||0)/10,0,1);
@@ -395,7 +446,7 @@ updateParticles();
 drawParticles();
 
 for(const r of roles){
-const st=state[r]||{};
+const st=sampleRole(r,now);
 const scn=forced==="fromClients"?(st.scene||"A"):forced;
 const sc=getSceneParams(scn);
 
@@ -403,12 +454,12 @@ const targetSx=st.sx||0;
 const targetSy=st.sy||0;
 const targetEnergy=st.energy||0;
 
-const attack=scn==="A"?.70:scn==="B"?.92:scn==="C"?.88:.84;
-const release=scn==="A"?.16:scn==="B"?.22:scn==="C"?.18:.16;
+const attackMs=scn==="A"?34:scn==="B"?18:scn==="C"?22:24;
+const releaseMs=scn==="A"?95:scn==="B"?70:scn==="C"?82:78;
 
-visual[r].sx=smoothValue(visual[r].sx,targetSx,attack,release,dtFactor);
-visual[r].sy=smoothValue(visual[r].sy,targetSy,attack,release,dtFactor);
-visual[r].energy=smoothValue(visual[r].energy,targetEnergy,.92,.16,dtFactor);
+visual[r].sx=smoothValue(visual[r].sx,targetSx,attackMs,releaseMs,dtMs);
+visual[r].sy=smoothValue(visual[r].sy,targetSy,attackMs,releaseMs,dtMs);
+visual[r].energy=smoothValue(visual[r].energy,targetEnergy,18,72,dtMs);
 
 const e=clamp(visual[r].energy/10,0,1);
 
@@ -455,33 +506,33 @@ visual[r].vy=0;
 visual[r].initialized=true;
 }
 
-visual[r].vx+=(targetX-visual[r].x)*.16*dtFactor;
-visual[r].vy+=(targetY-visual[r].y)*.16*dtFactor;
-visual[r].vx*=Math.pow(.72,dtFactor);
-visual[r].vy*=Math.pow(.72,dtFactor);
+visual[r].vx+=(targetX-visual[r].x)*.075;
+visual[r].vy+=(targetY-visual[r].y)*.075;
+visual[r].vx*=.84;
+visual[r].vy*=.84;
 visual[r].x+=visual[r].vx;
 visual[r].y+=visual[r].vy;
 
 drawX=visual[r].x;
 drawY=visual[r].y;
 }else{
-visual[r].x=lerp(visual[r].x||cx,cx,.14);
-visual[r].y=lerp(visual[r].y||cy,cy,.14);
+visual[r].x=lerp(visual[r].x||cx,cx,.06);
+visual[r].y=lerp(visual[r].y||cy,cy,.06);
 }
 }else{
-visual[r].x=lerp(visual[r].x||cx,cx,.14);
-visual[r].y=lerp(visual[r].y||cy,cy,.14);
+visual[r].x=lerp(visual[r].x||cx,cx,.06);
+visual[r].y=lerp(visual[r].y||cy,cy,.06);
 }
 
 const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
 if(scaleNorm<.58)visual[r].ready=true;
 
-const now=Date.now();
-const cooldown=scn==="C"?1400:scn==="D"?1600:99999;
+const nowMs=Date.now();
+const cooldown=scn==="C"?900:scn==="D"?1100:99999;
 
-if((scn==="C"||scn==="D")&&scaleNorm>.92&&visual[r].ready&&now-lastBurst[r]>cooldown){
+if((scn==="C"||scn==="D")&&scaleNorm>.92&&visual[r].ready&&nowMs-lastBurst[r]>cooldown){
 spawnParticles(r,scn,drawX,drawY,visual[r].energy||0);
-lastBurst[r]=now;
+lastBurst[r]=nowMs;
 visual[r].ready=false;
 }
 
@@ -489,13 +540,16 @@ shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B");
 }
 
 if(now-lastStatusUpdate>250){
-  statusEl.textContent=roles.map(r=>`${r}:${state[r]?.connected?"on":"off"} ${state[r]?.source||"none"}`).join(" | ");
+  statusEl.textContent=roles.map(r=>{
+    const st=sampleRole(r,now);
+    return `${r}:${st.connected?"on":"off"} ${st.source||"none"}`;
+  }).join(" | ");
   lastStatusUpdate=now;
 }
 requestAnimationFrame(render);
 }
 
-render();
+requestAnimationFrame(render);
 </script>
 </body>
 </html>
