@@ -42,7 +42,7 @@ canvas{display:block;width:100vw;height:100vh}
 
 <script>
 const canvas=document.getElementById("c"),
-ctx=canvas.getContext("2d"),
+ctx=canvas.getContext("2d",{alpha:false,desynchronized:true}),
 statusEl=document.getElementById("status"),
 serverInput=document.getElementById("serverInput"),
 connectBtn=document.getElementById("connectBtn"),
@@ -127,7 +127,31 @@ return[1,1];
 
 let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
 let particles=[];
+const MAX_PARTICLES=420;
 let lastBurst={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
+
+// Performance/responsiveness
+let vw=0, vh=0, dpr=1;
+let lastFrameTime=performance.now();
+let lastStatusUpdate=0;
+
+function resizeCanvas(){
+  const nextDpr=Math.min(window.devicePixelRatio||1,2);
+  const nextW=Math.floor(window.innerWidth*nextDpr);
+  const nextH=Math.floor(window.innerHeight*nextDpr);
+  if(canvas.width!==nextW||canvas.height!==nextH){
+    dpr=nextDpr;
+    vw=window.innerWidth;
+    vh=window.innerHeight;
+    canvas.width=nextW;
+    canvas.height=nextH;
+    canvas.style.width=vw+"px";
+    canvas.style.height=vh+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+}
+window.addEventListener("resize",resizeCanvas,{passive:true});
+resizeCanvas();
 
 function spawnParticles(role,scene,x,y,energy){
 if(scene==="B")return;
@@ -171,6 +195,9 @@ rot:Math.random()*Math.PI*2,
 vr:(Math.random()-.5)*.16,
 shapeType:shapeType
 });
+}
+if(particles.length>MAX_PARTICLES){
+  particles.splice(0,particles.length-MAX_PARTICLES);
 }
 }
 
@@ -324,17 +351,19 @@ strokePath(role,sx,sy);
 ctx.restore();
 }
 
-function smoothValue(current,target,attack,release){
-return target>current
-?current*(1-attack)+target*attack
-:current*(1-release)+target*release;
+function smoothValue(current,target,attack,release,dtFactor=1){
+const k=target>current?attack:release;
+const t=1-Math.pow(1-k,dtFactor);
+return current+(target-current)*t;
 }
 
-function render(){
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
+function render(now=performance.now()){
+const dtFactor=clamp((now-lastFrameTime)/16.666,0.5,2.5);
+lastFrameTime=now;
+resizeCanvas();
 
-const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
+const w=vw,h=vh,cx=w/2,cy=h/2;
+ctx.setTransform(dpr,0,0,dpr,0,0);
 ctx.fillStyle="rgb(5,5,5)";
 ctx.fillRect(0,0,w,h);
 
@@ -374,12 +403,12 @@ const targetSx=st.sx||0;
 const targetSy=st.sy||0;
 const targetEnergy=st.energy||0;
 
-const attack=scn==="A"?.38:scn==="B"?.82:scn==="C"?.78:.72;
-const release=scn==="A"?.045:scn==="B"?.11:scn==="C"?.055:.05;
+const attack=scn==="A"?.70:scn==="B"?.92:scn==="C"?.88:.84;
+const release=scn==="A"?.16:scn==="B"?.22:scn==="C"?.18:.16;
 
-visual[r].sx=smoothValue(visual[r].sx,targetSx,attack,release);
-visual[r].sy=smoothValue(visual[r].sy,targetSy,attack,release);
-visual[r].energy=smoothValue(visual[r].energy,targetEnergy,.82,.06);
+visual[r].sx=smoothValue(visual[r].sx,targetSx,attack,release,dtFactor);
+visual[r].sy=smoothValue(visual[r].sy,targetSy,attack,release,dtFactor);
+visual[r].energy=smoothValue(visual[r].energy,targetEnergy,.92,.16,dtFactor);
 
 const e=clamp(visual[r].energy/10,0,1);
 
@@ -426,22 +455,22 @@ visual[r].vy=0;
 visual[r].initialized=true;
 }
 
-visual[r].vx+=(targetX-visual[r].x)*.075;
-visual[r].vy+=(targetY-visual[r].y)*.075;
-visual[r].vx*=.84;
-visual[r].vy*=.84;
+visual[r].vx+=(targetX-visual[r].x)*.16*dtFactor;
+visual[r].vy+=(targetY-visual[r].y)*.16*dtFactor;
+visual[r].vx*=Math.pow(.72,dtFactor);
+visual[r].vy*=Math.pow(.72,dtFactor);
 visual[r].x+=visual[r].vx;
 visual[r].y+=visual[r].vy;
 
 drawX=visual[r].x;
 drawY=visual[r].y;
 }else{
-visual[r].x=lerp(visual[r].x||cx,cx,.06);
-visual[r].y=lerp(visual[r].y||cy,cy,.06);
+visual[r].x=lerp(visual[r].x||cx,cx,.14);
+visual[r].y=lerp(visual[r].y||cy,cy,.14);
 }
 }else{
-visual[r].x=lerp(visual[r].x||cx,cx,.06);
-visual[r].y=lerp(visual[r].y||cy,cy,.06);
+visual[r].x=lerp(visual[r].x||cx,cx,.14);
+visual[r].y=lerp(visual[r].y||cy,cy,.14);
 }
 
 const scaleNorm=Math.max(sx/sc.maxScale,sy/sc.maxScale);
@@ -459,7 +488,10 @@ visual[r].ready=false;
 shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B");
 }
 
-statusEl.textContent=roles.map(r=>`${r}:${state[r]?.connected?"on":"off"} ${state[r]?.source||"none"}`).join(" | ");
+if(now-lastStatusUpdate>250){
+  statusEl.textContent=roles.map(r=>`${r}:${state[r]?.connected?"on":"off"} ${state[r]?.source||"none"}`).join(" | ");
+  lastStatusUpdate=now;
+}
 requestAnimationFrame(render);
 }
 
