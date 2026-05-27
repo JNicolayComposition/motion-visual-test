@@ -54,10 +54,10 @@ const roles=["Piano1","Piano2","Perc1","Perc2"];
 let ws=null,state={};
 
 const SMOOTH_PROFILE={
-  interpMs:70,          // fills gaps between incoming websocket chunks
-  staleAfterMs:85,      // after this, gesture peaks start falling quickly
-  gestureDecayMs:150,   // sx/sy peak decay; lower = less "stuck" maxima
-  energyDecayMs:95,     // energy peak decay; lower = shorter flashes
+  interpMs:42,          // lower = more direct between websocket updates
+  staleAfterMs:42,      // peaks start falling almost immediately
+  gestureDecayMs:90,    // lower = maxima do not hang
+  energyDecayMs:55,     // energy flashes fall faster
   maxParticles:520
 };
 
@@ -180,8 +180,8 @@ showUI();
 
 function getSceneParams(scene){
 if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
-if(scene==="B")return{baseSize:.03,scaleGain:.76,maxScale:4.8,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:16,glowColor:[255,255,255],invertMode:false};
-if(scene==="C")return{baseSize:.05,scaleGain:1.16,maxScale:6.7,brightnessBase:.52,brightnessGain:.58,globalAmbient:.42,glowSpread:1.42,formAlpha:.96,formGlow:34,glowColor:[255,225,150],invertMode:false};
+if(scene==="B")return{baseSize:.03,scaleGain:.76,maxScale:4.8,brightnessBase:.34,brightnessGain:.38,globalAmbient:.22,glowSpread:1.42,formAlpha:1,formGlow:24,glowColor:null,invertMode:false};
+if(scene==="C")return{baseSize:.05,scaleGain:1.16,maxScale:6.7,brightnessBase:.60,brightnessGain:.72,globalAmbient:.46,glowSpread:1.48,formAlpha:.98,formGlow:42,glowColor:null,invertMode:false};
 return{baseSize:.03,scaleGain:.46,maxScale:3,brightnessBase:.10,brightnessGain:.72,globalAmbient:.14,glowSpread:1.40,formAlpha:.72,formGlow:42,glowColor:[255,255,255],invertMode:true};
 }
 
@@ -367,21 +367,22 @@ ctx.strokeRect(-38*sx,-38*sy,76*sx,76*sy);
 }
 }
 
-function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0,is3D=false){
+function shape(role,cx,cy,sx,sy,fill,glow,blur,rotation=0,is3D=false,scene="A"){
+const rgb=getRoleColor(role);
 ctx.save();
 ctx.translate(cx,cy);
 ctx.rotate(rotation);
 
 if(is3D){
 ctx.save();
-ctx.translate(7,-7);
-ctx.fillStyle="rgba(120,140,180,0.22)";
-drawPath(role,sx*1.01,sy*1.01);
+ctx.translate(9,-9);
+ctx.fillStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.34)`;
+drawPath(role,sx*1.02,sy*1.02);
 ctx.restore();
 
 ctx.save();
-ctx.translate(-5,5);
-ctx.fillStyle="rgba(255,255,255,0.16)";
+ctx.translate(-6,6);
+ctx.fillStyle="rgba(255,255,255,0.18)";
 drawPath(role,sx*0.96,sy*0.96);
 ctx.restore();
 }
@@ -393,15 +394,19 @@ drawPath(role,sx,sy);
 
 if(is3D){
 ctx.save();
-ctx.globalAlpha=.35;
+ctx.globalAlpha=.42;
 ctx.translate(-10,-12);
 ctx.scale(.72,.72);
-ctx.fillStyle="rgba(255,255,255,.38)";
+ctx.fillStyle="rgba(255,255,255,.42)";
 drawPath(role,sx,sy);
 ctx.restore();
 
-ctx.lineWidth=1.2;
-ctx.strokeStyle="rgba(255,255,255,.35)";
+ctx.lineWidth=1.4;
+ctx.strokeStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.72)`;
+strokePath(role,sx,sy);
+} else if(scene==="C"){
+ctx.lineWidth=1.1;
+ctx.strokeStyle=`rgba(255,255,255,0.30)`;
 strokePath(role,sx,sy);
 }
 
@@ -463,12 +468,12 @@ const targetSx=st.sx||0;
 const targetSy=st.sy||0;
 const targetEnergy=st.energy||0;
 
-const attackMs=scn==="A"?34:scn==="B"?18:scn==="C"?22:24;
-const releaseMs=scn==="A"?95:scn==="B"?70:scn==="C"?82:78;
+const attackMs=scn==="A"?24:scn==="B"?10:scn==="C"?12:16;
+const releaseMs=scn==="A"?72:scn==="B"?34:scn==="C"?38:54;
 
 visual[r].sx=smoothValue(visual[r].sx,targetSx,attackMs,releaseMs,dtMs);
 visual[r].sy=smoothValue(visual[r].sy,targetSy,attackMs,releaseMs,dtMs);
-visual[r].energy=smoothValue(visual[r].energy,targetEnergy,18,72,dtMs);
+visual[r].energy=smoothValue(visual[r].energy,targetEnergy,10,38,dtMs);
 
 const e=clamp(visual[r].energy/10,0,1);
 
@@ -477,12 +482,23 @@ const sy=clamp(sc.baseSize+visual[r].sy*sc.scaleGain,sc.baseSize,sc.maxScale);
 
 const rgb=getRoleColor(r);
 
-const fill=sc.invertMode
-?`rgba(${Math.round(rgb[0]*.55)},${Math.round(rgb[1]*.55)},${Math.round(rgb[2]*.55)},${sc.formAlpha})`
-:`rgba(255,255,255,${sc.formAlpha})`;
-
-const glow=`rgba(${sc.glowColor[0]},${sc.glowColor[1]},${sc.glowColor[2]},.95)`;
-const blur=sc.formGlow+visual[r].sx*8+visual[r].sy*8+e*(scn==="B"?28:12);
+let fill;
+let glow;
+if(sc.invertMode){
+  fill=`rgba(${Math.round(rgb[0]*.55)},${Math.round(rgb[1]*.55)},${Math.round(rgb[2]*.55)},${sc.formAlpha})`;
+  glow=`rgba(255,255,255,.95)`;
+}else if(scn==="B"){
+  fill=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.95)`;
+  glow=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.98)`;
+}else if(scn==="C"){
+  const boosted=rgb.map(v=>Math.min(255,Math.round(v*1.08+18)));
+  fill=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},0.98)`;
+  glow=`rgba(${boosted[0]},${boosted[1]},${boosted[2]},1)`;
+}else{
+  fill=`rgba(255,255,255,${sc.formAlpha})`;
+  glow=`rgba(${(sc.glowColor||[255,255,255])[0]},${(sc.glowColor||[255,255,255])[1]},${(sc.glowColor||[255,255,255])[2]},.95)`;
+}
+const blur=sc.formGlow+visual[r].sx*9+visual[r].sy*9+e*(scn==="B"?34:scn==="C"?24:12);
 
 let drawX=cx;
 let drawY=cy;
@@ -563,7 +579,7 @@ lastBurst[r]=nowMs;
 visual[r].ready=false;
 }
 
-shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B");
+shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B",scn);
 }
 
 if(now-lastStatusUpdate>250){
