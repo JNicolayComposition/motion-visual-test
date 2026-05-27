@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Master Visual</title>
+<title>Master Visual - Low Latency Spatial</title>
 
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;overflow:hidden}
@@ -180,8 +180,8 @@ showUI();
 
 function getSceneParams(scene){
 if(scene==="A")return{baseSize:.02,scaleGain:.24,maxScale:1.75,brightnessBase:.18,brightnessGain:.12,globalAmbient:.16,glowSpread:1.32,formAlpha:.58,formGlow:28,glowColor:[255,255,255],invertMode:false};
-if(scene==="B")return{baseSize:.03,scaleGain:.38,maxScale:2.4,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:16,glowColor:[255,255,255],invertMode:false};
-if(scene==="C")return{baseSize:.05,scaleGain:.58,maxScale:3.35,brightnessBase:.52,brightnessGain:.58,globalAmbient:.42,glowSpread:1.42,formAlpha:.96,formGlow:34,glowColor:[255,225,150],invertMode:false};
+if(scene==="B")return{baseSize:.03,scaleGain:.76,maxScale:4.8,brightnessBase:.26,brightnessGain:.24,globalAmbient:.20,glowSpread:1.38,formAlpha:1,formGlow:16,glowColor:[255,255,255],invertMode:false};
+if(scene==="C")return{baseSize:.05,scaleGain:1.16,maxScale:6.7,brightnessBase:.52,brightnessGain:.58,globalAmbient:.42,glowSpread:1.42,formAlpha:.96,formGlow:34,glowColor:[255,225,150],invertMode:false};
 return{baseSize:.03,scaleGain:.46,maxScale:3,brightnessBase:.10,brightnessGain:.72,globalAmbient:.14,glowSpread:1.40,formAlpha:.72,formGlow:42,glowColor:[255,255,255],invertMode:true};
 }
 
@@ -197,6 +197,15 @@ if(role==="Piano1")return[-1,-1];
 if(role==="Piano2")return[1,-1];
 if(role==="Perc1")return[-1,1];
 return[1,1];
+}
+
+function getRoleQuadrantPoint(role,w,h){
+// Scene D / inverse: each ensemble role lives in its own screen quadrant.
+// Keep this conservative so Scene D keeps its current size logic but is no longer center-stacked.
+if(role==="Piano1")return{x:w*.28,y:h*.28};
+if(role==="Piano2")return{x:w*.72,y:h*.28};
+if(role==="Perc1")return{x:w*.28,y:h*.72};
+return{x:w*.72,y:h*.72};
 }
 
 let rotations={Piano1:0,Piano2:0,Perc1:0,Perc2:0};
@@ -482,7 +491,25 @@ let rotation=0;
 const tiltX=clamp((st.tiltX||0)/45,-1,1);
 const tiltY=clamp((st.tiltY||0)/45,-1,1);
 
-if((st.mode||"impulse")==="tilt"){
+if(scn==="D"){
+const home=getRoleQuadrantPoint(r,w,h);
+const driftX=tiltX*w*.055;
+const driftY=tiltY*h*.055;
+const targetX=home.x+driftX;
+const targetY=home.y+driftY;
+if(!visual[r].initialized){
+visual[r].x=targetX;
+visual[r].y=targetY;
+visual[r].vx=0;
+visual[r].vy=0;
+visual[r].initialized=true;
+}
+visual[r].x=lerp(visual[r].x,targetX,.22);
+visual[r].y=lerp(visual[r].y,targetY,.22);
+drawX=visual[r].x;
+drawY=visual[r].y;
+}
+else if((st.mode||"impulse")==="tilt"){
 if(scn==="A"){
 const tiltAmount=Math.sqrt(tiltX*tiltX+tiltY*tiltY);
 const dir=tiltX>=0?1:-1;
