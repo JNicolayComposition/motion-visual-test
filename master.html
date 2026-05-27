@@ -122,8 +122,21 @@ function sampleRole(role,now=performance.now()){
 
 function updateRoleInput(role,next){
   const now=performance.now();
+  const incoming={...(next||{})};
+
+  // If a client/server sends residual/rest/idle as a scene, keep the last real scene.
+  // This is the main guard against uncontrolled jumps into residual mode.
+  const lastScene=sceneMemory[role]?.scene || state[role]?.scene || "A";
+  incoming.scene=normalizeScene(incoming.scene,lastScene);
+
+  // Treat residual/rest/idle as a non-visual mode, not as a scene switch.
+  // Keep the last active visual mode unless a valid impulse/tilt mode arrives.
+  if(/residual|rest|idle|none|default|null|undefined/i.test(String(incoming.mode||""))){
+    incoming.mode=state[role]?.mode || "impulse";
+  }
+
   inputBuffer[role].prev=sampleRole(role,now);
-  inputBuffer[role].target={...state[role],...(next||{})};
+  inputBuffer[role].target={...state[role],...incoming};
   inputBuffer[role].start=now;
   inputBuffer[role].lastUpdate=now;
   state[role]=inputBuffer[role].target;
@@ -139,10 +152,27 @@ for(const r of roles){
 sceneMemory[r]={scene:"A",candidate:"A",since:performance.now()};
 }
 
+function normalizeScene(raw,fallback="A"){
+  const s=String(raw||"").trim();
+
+  // Hard block old/residual states. They may still arrive from clients/server,
+  // but the master visual should not display them as a scene.
+  if(!s || /residual|rest|idle|none|default|null|undefined/i.test(s)){
+    return fallback;
+  }
+
+  // Accept common variants, but map them to the four visual scenes.
+  if(s==="A" || /scene\s*1|scene\s*a/i.test(s))return "A";
+  if(s==="B" || /scene\s*2|scene\s*b/i.test(s))return "B";
+  if(s==="C" || /scene\s*3|scene\s*c/i.test(s))return "C";
+  if(s==="D" || /scene\s*4|scene\s*d|inverse/i.test(s))return "D";
+
+  return fallback;
+}
+
 function stableSceneFor(role,requested,now){
-  const allowed={A:true,B:true,C:true,D:true};
-  const next=allowed[requested]?requested:"A";
   const m=sceneMemory[role];
+  const next=normalizeScene(requested,m.scene||"A");
 
   if(next===m.scene){
     m.candidate=next;
@@ -156,9 +186,9 @@ function stableSceneFor(role,requested,now){
     return m.scene;
   }
 
-  // Accept a scene change only if it persists briefly.
-  // This filters accidental one-frame jumps into old/residual client states.
-  if(now-m.since>140){
+  // Scene changes must persist. This prevents repeated old/residual packets
+  // from pulling the master back into a previous state.
+  if(now-m.since>220){
     m.scene=next;
   }
   return m.scene;
@@ -468,7 +498,7 @@ let amb=.1,spread=1.32;
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):normalizeScene(forced,"A");
 const sc=getSceneParams(scn);
 amb=Math.max(amb,sc.globalAmbient*.65);
 spread=Math.max(spread,sc.glowSpread);
@@ -478,7 +508,7 @@ let bright={};
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):normalizeScene(forced,"A");
 const sc=getSceneParams(scn);
 const e=clamp((st.energy||0)/10,0,1);
 bright[r]=clamp(sc.brightnessBase+e*sc.brightnessGain,sc.brightnessBase,1);
@@ -494,7 +524,7 @@ drawParticles();
 
 for(const r of roles){
 const st=sampleRole(r,now);
-const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):forced;
+const scn=forced==="fromClients"?stableSceneFor(r,st.scene||"A",now):normalizeScene(forced,"A");
 const sc=getSceneParams(scn);
 
 const targetSx=st.sx||0;
@@ -623,7 +653,7 @@ shape(r,drawX,drawY,sx,sy,fill,glow,blur,rotation,scn==="B",scn);
 if(now-lastStatusUpdate>250){
   statusEl.textContent=roles.map(r=>{
     const st=sampleRole(r,now);
-    return `${r}:${st.connected?"on":"off"} ${st.source||"none"}`;
+    return `${r}:${st.connected?"on":"off"} ${st.source||"none"} ${stableSceneFor(r,st.scene||"A",now)}`;
   }).join(" | ");
   lastStatusUpdate=now;
 }
